@@ -4,6 +4,8 @@ import uuid
 
 from app.services.school_service import login_and_get_session, get_schedule
 
+
+
 app = FastAPI()
 
 SESSION_STORE = {}  
