@@ -1,232 +1,192 @@
 import requests
 from bs4 import BeautifulSoup
 import re
+import time
+from fastapi import HTTPException
 
 LOGIN_URL = "https://student.uit.edu.vn/user/login"
 SCHEDULE_URL = "https://student.uit.edu.vn/sinhvien/tkb"
+SESSION_DURATION = 180  
+
+SESSION_STORE = {}
 
 DAYS = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"]
 PERIOD_TIME = {
-    1: "07:30-08:15",
-    2: "08:15-09:00",
-    3: "09:00-09:45",
-    4: "10:00-10:45",
-    5: "10:45-11:30",
-    6: "13:00-13:45",
-    7: "13:45-14:30",
-    8: "14:30-15:15",
-    9: "15:30-16:15",
-    10: "16:15-17:00",
+    1: "07:30-08:15", 2: "08:15-09:00", 3: "09:00-09:45", 4: "10:00-10:45", 5: "10:45-11:30",
+    6: "13:00-13:45", 7: "13:45-14:30", 8: "14:30-15:15", 9: "15:30-16:15", 10: "16:15-17:00",
 }
+
+
+def save_session(token, session, username, password):
+    SESSION_STORE[token] = {
+        "session": session,
+        "auth_data": {"username": username, "password": password},
+        "expires": time.time() + SESSION_DURATION
+    }
+
+def is_session_alive(session):
+    try:
+        res = session.get(LOGIN_URL, timeout=5, allow_redirects=False)
+        return res.status_code == 200
+    except:
+        return False
+
+def get_valid_session(token):
+    data = SESSION_STORE.get(token)
+    if not data:
+        return None
+    
+    current_session = data["session"]
+    
+    if time.time() > data["expires"] or not is_session_alive(current_session):
+        
+        username = data["auth_data"]["username"]
+        password = data["auth_data"]["password"]
+        
+        new_session = login_and_get_session(username, password)
+        
+        if new_session:
+            save_session(token, new_session, username, password)
+            return new_session
+        else:
+            print("Silent re-login failed.")
+            del SESSION_STORE[token]
+            return None
+            
+    return current_session
 
 def login_and_get_session(username, password):
     session = requests.Session()
+    headers = {"User-Agent": "Mozilla/5.0"}
 
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    try:
+        res = session.get(LOGIN_URL, headers=headers)
+        soup = BeautifulSoup(res.text, "html.parser")
 
-    res = session.get(LOGIN_URL, headers=headers)
-    soup = BeautifulSoup(res.text, "html.parser")
+        form = soup.find("form", {"id": "user-login"}) or soup.find("form", {"id": "user-login-form"})
+        if not form: return None
 
-    form = soup.find("form", {"id": "user-login"}) or soup.find("form", {"id": "user-login-form"})
-    if not form:
-        print("❌ Login form not found")
+        payload = {inp.get("name"): inp.get("value", "") for inp in form.find_all("input") if inp.get("name")}
+        payload.update({"name": username, "pass": password, "op": "Đăng nhập"})
+
+        img = form.select_one(".english-captcha-image img")
+        if img:
+            payload["english_captcha_answer"] = img["alt"].replace("captcha:", "").strip()
+
+        action = form.get("action", "/user/login")
+        login_url = "https://student.uit.edu.vn" + action
+        
+        login_res = session.post(login_url, data=payload, headers=headers)
+        
+        if "not-logged-in" not in login_res.text and login_res.status_code == 200:
+            return session
         return None
-
-    payload = {}
-
-    for inp in form.find_all("input"):
-        name = inp.get("name")
-        value = inp.get("value", "")
-        if name:
-            payload[name] = value
-
-    payload["name"] = username
-    payload["pass"] = password
-
-    img = form.select_one(".english-captcha-image img")
-    captcha = img["alt"].replace("captcha:", "").strip() if img else ""
-    payload["english_captcha_answer"] = captcha
-
-    payload["op"] = "Đăng nhập"
-
-    action = form.get("action")
-    login_url = "https://student.uit.edu.vn" + action
-
-    login_res = session.post(login_url, data=payload, headers=headers)
-
-    success = "not-logged-in" not in login_res.text
-    print("✅ Login success" if success else "❌ Login failed")
-
-    return session if success else None
-
-
+    except:
+        return None
 def get_schedule(session):
     res = session.get(SCHEDULE_URL)
-
-    if res is None:
-        print("❌ Request failed")
-        return []
-
-    if res.status_code != 200:
-        print("❌ Bad response:", res.status_code)
-        return []
+    if not res or res.status_code != 200: return []
 
     soup = BeautifulSoup(res.text, "html.parser")
-
     table = soup.select_one(".tkb-table")
-    if not table:
-        print("❌ Table not found (maybe access denied)")
-        print(res.text[:500])
-        return []
+    if not table: return []
 
     rows = table.select("tbody tr")
-
     raw_schedule = []
     rowspan_tracker = {}
 
     for row in rows:
         cols = row.find_all("td")
-
-        raw_period = cols[0].get_text(" ", strip=True)
+        if not cols: continue
+        
+        raw_period = cols[0].get_text(strip=True)
         match = re.search(r"Tiết\s*(\d+)", raw_period)
-        period_number = int(match.group(1)) if match else None
-
-        if period_number is None:
-            continue
+        if not match: continue
+        period_number = int(match.group(1))
 
         col_idx = -1
-
         for cell in cols[1:]:
             col_idx += 1
-
             while rowspan_tracker.get(col_idx, 0) > 0:
                 rowspan_tracker[col_idx] -= 1
                 col_idx += 1
 
             card = cell.select_one(".tkb-card")
+            rowspan = int(cell.get("rowspan", 1))
 
             if card:
                 titles = card.select(".title")
                 subs = card.select(".sub")
-
-                rowspan = int(cell.get("rowspan", 1))
+                
+                full_date_range = subs[2].text.strip() if len(subs) > 2 else ""
 
                 for i in range(rowspan):
                     raw_schedule.append({
                         "day": DAYS[col_idx] if col_idx < len(DAYS) else "",
-                        "period": period_number + i if period_number else None,
-                        "code": titles[0].text.strip() if len(titles) > 0 else "",
+                        "period": period_number + i,
+                        "code": titles[0].text.strip() if titles else "",
                         "name": titles[1].text.strip() if len(titles) > 1 else "",
-                        "room": subs[0].text.strip() if len(subs) > 0 else "",
+                        "room": subs[0].text.strip() if subs else "",
                         "teacher": subs[1].text.strip() if len(subs) > 1 else "",
-                        "date": subs[2].text.strip() if len(subs) > 2 else "",
+                        "date": full_date_range,
                     })
 
-                if rowspan > 1:
-                    rowspan_tracker[col_idx] = rowspan - 1
-
-                rowspan = int(cell.get("rowspan", 1))
-                if rowspan > 1:
-                    rowspan_tracker[col_idx] = rowspan - 1
-
-            else:
-                rowspan = int(cell.get("rowspan", 1))
-                if rowspan > 1:
-                    rowspan_tracker[col_idx] = rowspan - 1
+            if rowspan > 1:
+                rowspan_tracker[col_idx] = rowspan - 1
 
     return merge_schedule(raw_schedule)
 
 def merge_schedule(schedule):
     merged = {}
-
     for item in schedule:
-        key = (
-            item["day"],
-            item["code"],
-            item["name"],
-            item["room"],
-            item["teacher"],
-            item["date"],
-        )
-
+        key = (item["day"], item["code"], item["name"], item["room"], item["teacher"], item["date"])
         if key not in merged:
-            merged[key] = {
-                **item,
-                "periods": []
-            }
-
-        if item["period"] is not None:
-            merged[key]["periods"].append(item["period"])
+            merged[key] = {**item, "periods": []}
+        merged[key]["periods"].append(item["period"])
 
     result = []
-
     for data in merged.values():
         periods = sorted(set(data["periods"]))
-
-        if not periods:
-            continue
+        if not periods: continue
 
         ranges = []
         start = end = periods[0]
-
         for p in periods[1:]:
-            if p == end + 1:
-                end = p
+            if p == end + 1: end = p
             else:
                 ranges.append((start, end))
                 start = end = p
-
         ranges.append((start, end))
 
-        period_str = ", ".join(
-            f"Tiết {s}" if s == e else f"Tiết {s}-{e}"
-            for s, e in ranges
-        )
+        p_str = ", ".join(f"Tiết {s}-{e}" if s != e else f"Tiết {s}" for s, e in ranges)
+        
+        start_h = PERIOD_TIME.get(min(periods), "").split("-")[0]
+        end_h = PERIOD_TIME.get(max(periods), "").split("-")[1]
 
-        time_ranges = []
-        start_times = []
-        end_times = []
-
-        for s, e in ranges:
-            start_time = PERIOD_TIME.get(s)
-            end_time = PERIOD_TIME.get(e)
-
-            if start_time and end_time:
-                start_hour = start_time.split("-")[0]
-                end_hour = end_time.split("-")[1]
-
-                time_ranges.append(f"{start_hour}-{end_hour}")
-                start_times.append(start_hour)
-                end_times.append(end_hour)
+        raw_date = data["date"]
+        start_date = ""
+        end_date = ""
+        
+        if "->" in raw_date:
+            parts = raw_date.split("->")
+            start_date = parts[0].strip()
+            end_date = parts[1].strip()
+        else:
+            start_date = raw_date 
 
         result.append({
             "day": data["day"],
-            "period": period_str,
-            "time": ", ".join(time_ranges),
-            "start_time": min(start_times) if start_times else "",
-            "end_time": max(end_times) if end_times else "",
+            "period": p_str,
+            "time": f"{start_h}-{end_h}",
+            "start_time": start_h,
+            "end_time": end_h,
+            "start_date": start_date, 
+            "end_date": end_date,     
             "code": data["code"],
             "name": data["name"],
             "room": data["room"],
             "teacher": data["teacher"],
-            "date": data["date"],
+            "date": data["date"], 
         })
-
     return result
 
-if __name__ == "__main__":
-    username = input("Enter username: ")
-    password = input("Enter password: ")
-
-    session = login(username, password)
-    if not session:
-        print("❌ Login failed")
-    else:
-        print("✅ Fetching schedule...")
-
-        subjects = get_schedule(session)
-
-        for item in subjects:
-            print(item)

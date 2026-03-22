@@ -34,10 +34,10 @@ def login(data: LoginRequest):
 
 @app.get("/schedule")
 def schedule(authorization: str = Header(None)):
-    """
-    Header:
-    Authorization: Bearer <token>
-    """
+    # """
+    # Header:
+    # Authorization: Bearer <token>
+    # """
 
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing token")

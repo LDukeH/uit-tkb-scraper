@@ -1,31 +1,23 @@
 from fastapi import APIRouter, Header, HTTPException
 
-from app.services.school_service import get_schedule
+from app.services.school_service import get_schedule,get_valid_session
 from app.core.session_store import SESSION_STORE
 
 router = APIRouter(prefix="/schedule", tags=["Schedule"])
 
 from app.models.schema import ScheduleResponse
 
-@router.get("/", response_model=ScheduleResponse)
+@router.get("/")
 def fetch_schedule(authorization: str = Header(None)):
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing token")
-
     token = authorization.replace("Bearer ", "")
-    session = SESSION_STORE.get(token)
-
+    
+    session = get_valid_session(token)
+    
     if not session:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Session expired and re-login failed")
 
     try:
         data = get_schedule(session)
-
-        return {
-            "success": True,
-            "count": len(data),
-            "data": data
-        }
-
+        return {"success": True, "data": data}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Lỗi lấy dữ liệu")
