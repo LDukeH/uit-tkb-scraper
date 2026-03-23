@@ -30,3 +30,14 @@ class ScheduleResponse(BaseModel):
     success: bool
     count: int
     data: List[Subject]
+
+class Announcement(BaseModel):
+    title: str
+    content: str
+    date: str
+    url: str
+
+class AnnouncementResponse(BaseModel):
+    success: bool
+    data: List[Announcement]
+

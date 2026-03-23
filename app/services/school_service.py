@@ -190,3 +190,45 @@ def merge_schedule(schedule):
         })
     return result
 
+
+# Add this to your school_service.py
+def get_announcements():
+    ANNOUNCEMENT_URL = "https://student.uit.edu.vn/thong-bao-chung"
+    try:
+        res = requests.get(ANNOUNCEMENT_URL, timeout=10)
+        if res.status_code != 200:
+            return []
+            
+        soup = BeautifulSoup(res.text, "html.parser")
+        articles = soup.find_all("article")
+        announcement_list = []
+
+        for article in articles:
+            header = article.find("h2")
+            if not header: continue
+            
+            a_tag = header.find("a")
+            title = header.get_text(strip=True)
+            url = "https://student.uit.edu.vn" + a_tag["href"] if a_tag else ""
+            
+            content_div = article.find(class_="content")
+            content_text = content_div.get_text(strip=True) if content_div else ""
+            
+            # Parsing the date from the 'submitted' span
+            submitted_span = article.select_one(".submitted span")
+            date_val = ""
+            if submitted_span and submitted_span.has_attr("content"):
+                date_val = submitted_span["content"] # ISO format string
+            
+            announcement_list.append({
+                "title": title,
+                "content": content_text,
+                "date": date_val,
+                "url": url
+            })
+            
+        return announcement_list
+    except Exception as e:
+        print(f"Scraping error: {e}")
+        return []   
+    
