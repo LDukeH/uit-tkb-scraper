@@ -5,3 +5,5 @@ beautifulsoup4
 lxml
 pydantic
 pydantic-settings
+pymongo
+python-dotenv
