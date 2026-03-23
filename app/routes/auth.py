@@ -1,24 +1,43 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
+from pydantic import BaseModel
 import uuid
 
-from app.models.schema import LoginRequest, LoginResponse
-from app.services.school_service import login_and_get_session
-from app.core.session_store import SESSION_STORE
+from app.services.school_service import (
+    login_and_get_session,
+    save_session,
+    SESSION_STORE
+)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-@router.post("/login", response_model=LoginResponse)
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@router.post("/login")
 def login(data: LoginRequest):
     session = login_and_get_session(data.username, data.password)
 
     if not session:
-        raise HTTPException(status_code=401, detail="Login failed")
+        raise HTTPException(status_code=401, detail="Đăng nhập UIT thất bại.")
 
     token = str(uuid.uuid4())
-    SESSION_STORE[token] = session
+    save_session(token, session, data.username, data.password)
 
     return {
         "success": True,
         "token": token
     }
+
+
+@router.post("/logout")
+def logout(authorization: str = Header(None)):
+    if not authorization:
+        return {"success": True}
+
+    token = authorization.replace("Bearer ", "")
+    SESSION_STORE.pop(token, None)
+
+    return {"success": True}

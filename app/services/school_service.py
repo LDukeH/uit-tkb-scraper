@@ -2,11 +2,10 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import time
-from fastapi import HTTPException
 
 LOGIN_URL = "https://student.uit.edu.vn/user/login"
 SCHEDULE_URL = "https://student.uit.edu.vn/sinhvien/tkb"
-SESSION_DURATION = 180  
+SESSION_DURATION = 1800  
 
 SESSION_STORE = {}
 
@@ -49,7 +48,7 @@ def get_valid_session(token):
             save_session(token, new_session, username, password)
             return new_session
         else:
-            print("Silent re-login failed.")
+            print("Re-login failed.")
             del SESSION_STORE[token]
             return None
             
@@ -191,44 +190,78 @@ def merge_schedule(schedule):
     return result
 
 
-# Add this to your school_service.py
-def get_announcements():
-    ANNOUNCEMENT_URL = "https://student.uit.edu.vn/thong-bao-chung"
-    try:
-        res = requests.get(ANNOUNCEMENT_URL, timeout=10)
-        if res.status_code != 200:
-            return []
-            
-        soup = BeautifulSoup(res.text, "html.parser")
-        articles = soup.find_all("article")
-        announcement_list = []
+BASE_URL = "https://student.uit.edu.vn"
+ANNOUNCEMENT_URL = BASE_URL + "/thong-bao-chung?page="
 
-        for article in articles:
-            header = article.find("h2")
-            if not header: continue
-            
-            a_tag = header.find("a")
-            title = header.get_text(strip=True)
-            url = "https://student.uit.edu.vn" + a_tag["href"] if a_tag else ""
-            
-            content_div = article.find(class_="content")
-            content_text = content_div.get_text(strip=True) if content_div else ""
-            
-            # Parsing the date from the 'submitted' span
-            submitted_span = article.select_one(".submitted span")
-            date_val = ""
-            if submitted_span and submitted_span.has_attr("content"):
-                date_val = submitted_span["content"] # ISO format string
-            
-            announcement_list.append({
-                "title": title,
-                "content": content_text,
-                "date": date_val,
-                "url": url
-            })
-            
-        return announcement_list
+def get_all_announcements(max_pages=10):
+    results = []
+
+    for page in range(max_pages):
+        url = ANNOUNCEMENT_URL + str(page)
+
+        try:
+            res = requests.get(url, timeout=10)
+            if res.status_code != 200:
+                break
+
+            soup = BeautifulSoup(res.text, "html.parser")
+            articles = soup.find_all("article")
+
+            if not articles:
+                break
+
+            for article in articles:
+                data = parse_article(article)
+                if data:
+                    results.append(data)
+
+            time.sleep(0.5)  # tranh bi block
+
+        except Exception as e:
+            print(f"Error page {page}: {e}")
+            continue
+
+    return results
+
+
+def parse_article(article):
+    try:
+        node_id = article.get("id", "").replace("node-", "")
+
+        header = article.find("h2")
+        if not header:
+            return None
+
+        a_tag = header.find("a")
+        title = header.get_text(strip=True)
+
+        link = ""
+        if a_tag and a_tag.get("href"):
+            link = BASE_URL + a_tag["href"]
+
+        date_val = ""
+        submitted_span = article.select_one(".submitted span")
+        if submitted_span and submitted_span.has_attr("content"):
+            date_val = submitted_span["content"]
+
+        content_text = ""
+        content_div = article.find(class_="content")
+        if content_div:
+            content_text = content_div.get_text(separator="\n", strip=True)
+
+        return {
+            "node_id": node_id,
+            "title": title,
+            "preview": content_text,
+            "date": date_val,
+            "link": link
+        }
+
     except Exception as e:
-        print(f"Scraping error: {e}")
-        return []   
-    
+        print("Parse error:", e)
+        return None
+
+
+if __name__ == "__main__":
+    data = get_all_announcements()
+    print("Total:", len(data))
