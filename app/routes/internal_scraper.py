@@ -6,7 +6,7 @@ import os
 
 router = APIRouter(prefix="/internal_scraper", tags=["Internal"])
 
-SECRET_KEY = os.getenv("SCRAPER_SECRET", "default_key")
+SECRET_KEY = os.getenv("SCRAPER_SECRET")
 
 
 @router.get("/")
