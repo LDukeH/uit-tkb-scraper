@@ -4,7 +4,7 @@ from app.services.data_insert import insert_announcements
 from fastapi import APIRouter, HTTPException
 import os
 
-router = APIRouter(prefix="/internal_scrapper", tags=["Internal"])
+router = APIRouter(prefix="/internal_scraper", tags=["Internal"])
 
 SECRET_KEY = os.getenv("SCRAPER_SECRET", "default_key")
 

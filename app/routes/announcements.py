@@ -11,7 +11,7 @@ def get_announcements():
             announcement_collection
             .find({}, {"_id": 0})
             .sort("date", -1)
-            .limit(50)
+            .limit(15)
         )
 
         return {
