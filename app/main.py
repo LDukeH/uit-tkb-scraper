@@ -17,7 +17,9 @@ print("SCRAPER_SECRET =", os.getenv("SCRAPER_SECRET"))
 def root():
     return {
         "message": "UIT School API is running!",
-        "status": "healthy"
+        "status": "healthy",
+        "MONGO_URL":os.getenv("MONGO_URL"),
+        "SCRAPER_SECRET ": os.getenv("SCRAPER_SECRET")
     }
 
 
