@@ -36,6 +36,7 @@ class Announcement(BaseModel):
     content: str
     date: str
     url: str
+    topic: str
 
 class AnnouncementResponse(BaseModel):
     success: bool

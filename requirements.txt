@@ -7,3 +7,5 @@ pydantic
 pydantic-settings
 pymongo
 python-dotenv
+scikit-learn
+certifi
