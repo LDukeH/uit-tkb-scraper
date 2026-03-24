@@ -11,7 +11,8 @@ def insert_announcements(data_list):
             "preview": item["preview"],
             "date": item["date"],
             "source": "student.uit.edu.vn",
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.utcnow(),
+            "topic": item["topic"]
         }
 
         # 🔥 upsert (tránh duplicate)
