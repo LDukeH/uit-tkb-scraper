@@ -5,7 +5,7 @@ import time
 
 LOGIN_URL = "https://student.uit.edu.vn/user/login"
 SCHEDULE_URL = "https://student.uit.edu.vn/sinhvien/tkb"
-SESSION_DURATION = 1800  
+SESSION_DURATION = 900  
 
 SESSION_STORE = {}
 
@@ -36,6 +36,7 @@ def get_valid_session(token):
         return None
     
     current_session = data["session"]
+    data["expires"] = time.time() + SESSION_DURATION
     
     if time.time() > data["expires"] or not is_session_alive(current_session):
         
