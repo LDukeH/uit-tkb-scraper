@@ -8,3 +8,5 @@ pydantic-settings
 pymongo
 python-dotenv
 python-jose
+scikit-learn
+certifi
