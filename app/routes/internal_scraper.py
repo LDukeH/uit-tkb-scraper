@@ -1,4 +1,4 @@
-from app.services.school_service import get_all_announcements
+from app.services.school_service import get_all_announcements_full
 from app.services.data_insert import insert_announcements
 from app.services.analyze_service import label_announcements
 
@@ -15,7 +15,7 @@ def run_scraper(key: str):
     if key != SECRET_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    data = get_all_announcements()
+    data = get_all_announcements_full()
     data = label_announcements(data)
     insert_announcements(data)
 

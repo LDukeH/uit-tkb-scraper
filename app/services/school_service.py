@@ -262,7 +262,136 @@ def parse_article(article):
         print("Parse error:", e)
         return None
 
+def parse_content_element(element) -> str:
+    result = []
+
+    for child in element.children:
+        if isinstance(child, str):
+            text = child.strip()
+            if text:
+                result.append(text)
+            continue
+
+        tag = child.name
+
+        if tag == "table":
+            result.append(parse_table(child))
+
+        elif tag in ("p", "div", "h1", "h2", "h3", "h4", "li"):
+            inner = child.get_text(separator=" ", strip=True)
+            if inner:
+                result.append(inner)
+
+        elif tag in ("ul", "ol"):
+            for li in child.find_all("li", recursive=False):
+                result.append("- " + li.get_text(separator=" ", strip=True))
+
+        elif tag == "br":
+            result.append("")
+
+        else:
+            # fallback: just grab text
+            inner = child.get_text(separator=" ", strip=True)
+            if inner:
+                result.append(inner)
+
+    return "\n".join(result)
+
+
+def parse_table(table) -> str:
+    rows = table.find_all("tr")
+    if not rows:
+        return ""
+
+    table_data = []
+    for row in rows:
+        cells = row.find_all(["td", "th"])
+        table_data.append([cell.get_text(separator=" ", strip=True) for cell in cells])
+
+    if not table_data:
+        return ""
+
+    # Normalize column count
+    col_count = max(len(row) for row in table_data)
+    for row in table_data:
+        while len(row) < col_count:
+            row.append("")
+
+    # Calculate column widths
+    col_widths = [
+        max(len(row[i]) for row in table_data)
+        for i in range(col_count)
+    ]
+
+    lines = []
+    for i, row in enumerate(table_data):
+        padded = [row[j].ljust(col_widths[j]) for j in range(col_count)]
+        lines.append("| " + " | ".join(padded) + " |")
+        if i == 0:  # header separator
+            lines.append("| " + " | ".join("-" * col_widths[j] for j in range(col_count)) + " |")
+
+    return "\n".join(lines)
+
+
+def fetch_article_content(article_summary: dict) -> dict:
+    try:
+        res = requests.get(article_summary["link"], timeout=10)
+        if res.status_code != 200:
+            return None
+
+        soup = BeautifulSoup(res.text, "html.parser")
+        article = soup.find("article")
+        if not article:
+            return None
+
+        content_div = article.select_one(".field-name-body .field-item")
+        full_content = parse_content_element(content_div) if content_div else ""
+
+        related = []
+        for a in soup.select("#block-views-contents-block-1 .view-content a"):
+            href = a.get("href", "")
+            related.append({
+                "title": a.get_text(strip=True),
+                "link": BASE_URL + href if href.startswith("/") else href
+            })
+
+        return {
+            "node_id": article_summary["node_id"],
+            "title": article_summary["title"],
+            "date": article_summary["date"],
+            "link": article_summary["link"],
+            "content": full_content,
+            "related": related
+        }
+
+    except Exception as e:
+        print(f"Error fetching {article_summary.get('link')}: {e}")
+        return None
+    
+
+
+def get_all_announcements_full(max_pages=10) -> list:
+    summaries = get_all_announcements(max_pages)
+    results = []
+
+    for i, summary in enumerate(summaries):
+        print(f"Fetching [{i+1}/{len(summaries)}]: {summary['title'][:60]}...")
+        full = fetch_article_content(summary)
+        if full:
+            full["preview"] = summary.get("preview", "")
+            results.append(full)
+        time.sleep(0.5)
+
+    return results
+
 
 if __name__ == "__main__":
-    data = get_all_announcements()
-    print("Total:", len(data))
+    data = get_all_announcements_full(max_pages=2)
+    print(f"Total fetched: {len(data)}")
+    for item in data[:2]:
+        print("---")
+        print(f"ID: {item['node_id']}")
+        print(f"Title: {item['title']}")
+        print(f"Date: {item['date']}")
+        print(f"Content preview: {item['content']}")
+
