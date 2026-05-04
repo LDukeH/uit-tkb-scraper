@@ -13,6 +13,7 @@ def insert_announcements(data_list):
             "date": item["date"],
             "source": "student.uit.edu.vn",
             "updated_at": datetime.utcnow(),
+            "topic": item.get("topic","Unknown"),
             "details": {
                 "content": item.get("content", ""),
                 "related": item.get("related", [])
