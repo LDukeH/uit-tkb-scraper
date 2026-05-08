@@ -360,8 +360,10 @@ def fetch_article_content(article_summary: dict) -> dict:
             "title": article_summary["title"],
             "date": article_summary["date"],
             "link": article_summary["link"],
-            "content": full_content,
-            "related": related
+            "details": {
+                "content": full_content,
+                "related": related
+                        }
         }
 
     except Exception as e:
