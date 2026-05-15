@@ -34,17 +34,17 @@ def get_valid_session(token):
     data = SESSION_STORE.get(token)
     if not data:
         return None
-    
+
     current_session = data["session"]
-    data["expires"] = time.time() + SESSION_DURATION
-    
-    if time.time() > data["expires"] or not is_session_alive(current_session):
-        
+
+    session_expired = time.time() > data["expires"]
+    session_dead = not is_session_alive(current_session)
+
+    if session_expired or session_dead:
         username = data["auth_data"]["username"]
         password = data["auth_data"]["password"]
-        
+
         new_session = login_and_get_session(username, password)
-        
         if new_session:
             save_session(token, new_session, username, password)
             return new_session
@@ -52,7 +52,9 @@ def get_valid_session(token):
             print("Re-login failed.")
             del SESSION_STORE[token]
             return None
-            
+
+    # Chỉ refresh expires khi session còn sống
+    data["expires"] = time.time() + SESSION_DURATION
     return current_session
 
 def login_and_get_session(username, password):
@@ -374,16 +376,25 @@ def fetch_article_content(article_summary: dict) -> dict:
 
 def get_all_announcements_full(max_pages=10) -> list:
     summaries = get_all_announcements(max_pages)
-    results = []
+    if not summaries:
+        print("No summaries fetched — scraping failed or site blocked.")
+        return []
 
+    results = []
     for i, summary in enumerate(summaries):
         print(f"Fetching [{i+1}/{len(summaries)}]: {summary['title'][:60]}...")
-        full = fetch_article_content(summary)
-        if full:
-            full["preview"] = summary.get("preview", "")
-            results.append(full)
+        try:
+            full = fetch_article_content(summary)
+            if full:
+                full["preview"] = summary.get("preview", "")
+                results.append(full)
+            else:
+                print(f"  ⚠ fetch_article_content returned None for: {summary['link']}")
+        except Exception as e:
+            print(f"  ✗ Exception on {summary['link']}: {e}")
         time.sleep(0.5)
 
+    print(f"Successfully fetched: {len(results)}/{len(summaries)}")
     return results
 
 
@@ -395,5 +406,5 @@ if __name__ == "__main__":
         print(f"ID: {item['node_id']}")
         print(f"Title: {item['title']}")
         print(f"Date: {item['date']}")
-        print(f"Content preview: {item['content']}")
+        print(f"Content preview: {item['details']['content'][:200]}")
 
