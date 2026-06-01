@@ -2,6 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import time
+import os
+from datetime import datetime, timedelta
 
 LOGIN_URL = "https://student.uit.edu.vn/user/login"
 SCHEDULE_URL = "https://student.uit.edu.vn/sinhvien/tkb"
@@ -53,7 +55,7 @@ def get_valid_session(token):
             del SESSION_STORE[token]
             return None
 
-    # Chỉ refresh expires khi session còn sống
+    # chi refresh expires neu session con song
     data["expires"] = time.time() + SESSION_DURATION
     return current_session
 
@@ -218,7 +220,8 @@ def get_all_announcements(max_pages=10):
                 if data:
                     results.append(data)
 
-            time.sleep(0.5)  # tranh bi block
+            # tam dung tranh block
+            time.sleep(0.5)
 
         except Exception as e:
             print(f"Error page {page}: {e}")
@@ -292,7 +295,7 @@ def parse_content_element(element) -> str:
             result.append("")
 
         else:
-            # fallback: just grab text
+            # du phong lay text
             inner = child.get_text(separator=" ", strip=True)
             if inner:
                 result.append(inner)
@@ -313,13 +316,13 @@ def parse_table(table) -> str:
     if not table_data:
         return ""
 
-    # Normalize column count
+    # chuan hoa so cot
     col_count = max(len(row) for row in table_data)
     for row in table_data:
         while len(row) < col_count:
             row.append("")
 
-    # Calculate column widths
+    # tinh chieu rong cot
     col_widths = [
         max(len(row[i]) for row in table_data)
         for i in range(col_count)
@@ -396,6 +399,158 @@ def get_all_announcements_full(max_pages=10) -> list:
 
     print(f"Successfully fetched: {len(results)}/{len(summaries)}")
     return results
+
+
+def load_cached_schedule(user_id: str):
+    """Return cached schedule document for given user_id.
+
+    Note: schedule cache is stored per-user only; exam schedules (lanthi/hocky/namhoc)
+    are stored separately if needed.
+    """
+    try:
+        from app.core.db import schedule_collection
+        doc = schedule_collection.find_one({"user_id": user_id}, {"_id": 0})
+        return doc
+    except Exception as e:
+        print(f"Error loading cached schedule: {e}")
+        return None
+
+
+def save_schedule(user_id: str, schedule_rows: list, ttl_days: int = None):
+    """Upsert schedule for user with an expiry (`expires_at`).
+
+    `ttl_days` defaults to env `SCHEDULE_CACHE_TTL_DAYS` or 7 days.
+    """
+    try:
+        from app.core.db import schedule_collection
+
+        if ttl_days is None:
+            try:
+                ttl_days = int(os.getenv("SCHEDULE_CACHE_TTL_DAYS", "7"))
+            except Exception:
+                ttl_days = 7
+
+        expires = datetime.utcnow() + timedelta(days=ttl_days)
+
+        doc = {
+            "user_id": user_id,
+            "schedule": schedule_rows,
+            "updated_at": datetime.utcnow(),
+            "expires_at": expires,
+            "source": "student.uit.edu.vn",
+        }
+
+        schedule_collection.update_one(
+            {"user_id": user_id},
+            {"$set": doc},
+            upsert=True,
+        )
+        return True
+    except Exception as e:
+        print(f"Error saving schedule: {e}")
+        return False
+
+
+def load_cached_exam_schedule(user_id: str, lanthi: int, hocky: int, namhoc: int):
+    """Return cached exam schedule for a user and term."""
+    try:
+        from app.core.db import exam_collection
+        return exam_collection.find_one(
+            {"user_id": user_id, "lanthi": lanthi, "hocky": hocky, "namhoc": namhoc},
+            {"_id": 0}
+        )
+    except Exception as e:
+        print(f"Error loading cached exam schedule: {e}")
+        return None
+
+
+def save_exam_schedule(user_id: str, lanthi: int, hocky: int, namhoc: int, exam_rows: list, ttl_days: int = None):
+    """Upsert exam schedule for a user/term with expiry."""
+    try:
+        from app.core.db import exam_collection
+
+        if ttl_days is None:
+            try:
+                ttl_days = int(os.getenv("EXAM_CACHE_TTL_DAYS", os.getenv("SCHEDULE_CACHE_TTL_DAYS", "7")))
+            except Exception:
+                ttl_days = 7
+
+        expires = datetime.utcnow() + timedelta(days=ttl_days)
+
+        doc = {
+            "user_id": user_id,
+            "lanthi": lanthi,
+            "hocky": hocky,
+            "namhoc": namhoc,
+            "exam_schedule": exam_rows,
+            "updated_at": datetime.utcnow(),
+            "expires_at": expires,
+            "source": "student.uit.edu.vn",
+        }
+
+        exam_collection.update_one(
+            {"user_id": user_id, "lanthi": lanthi, "hocky": hocky, "namhoc": namhoc},
+            {"$set": doc},
+            upsert=True,
+        )
+        return True
+    except Exception as e:
+        print(f"Error saving exam schedule: {e}")
+        return False
+
+
+def get_exam_schedule(session, lanthi: int = 1, hocky: int = 1, namhoc: int = 2025) -> list:
+    """Fetch exam schedule (lich thi) for given parameters using an authenticated session.
+
+    Returns list of rows with keys: `stt`, `ma_mh`, `ma_lop`, `ca_tiet_thi`, `thu_thi`,
+    `ngay_thi`, `phong_thi`, `ghi_chu`.
+    """
+    url = BASE_URL + "/sinhvien/lichhoc/lichthi"
+    params = {"lanthi": str(lanthi), "hocky": str(hocky), "namhoc": str(namhoc)}
+
+    try:
+        res = session.get(url, params=params, timeout=10)
+        if res.status_code != 200:
+            return []
+
+        soup = BeautifulSoup(res.text, "html.parser")
+        table = soup.select_one("table.sticky-enabled.tableheader-processed.sticky-table") or soup.find("table")
+        if not table:
+            return []
+
+        rows = table.select("tbody tr")
+        results = []
+        for row in rows:
+            cols = [td.get_text(strip=True) for td in row.find_all("td")]
+            if not cols:
+                continue
+
+            # map cot sang truong xu ly thieu cell
+            def col(i):
+                return cols[i] if i < len(cols) else ""
+
+            try:
+                stt = int(col(0)) if col(0).isdigit() else col(0)
+            except:
+                stt = col(0)
+
+            item = {
+                "stt": stt,
+                "ma_mh": col(1),
+                "ma_lop": col(2),
+                "ca_tiet_thi": col(3),
+                "thu_thi": col(4),
+                "ngay_thi": col(5),
+                "phong_thi": col(6),
+                "ghi_chu": col(7),
+            }
+            results.append(item)
+
+        return results
+
+    except Exception as e:
+        print(f"Error fetching exam schedule: {e}")
+        return []
 
 
 if __name__ == "__main__":

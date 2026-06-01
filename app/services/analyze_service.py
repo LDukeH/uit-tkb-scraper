@@ -16,7 +16,7 @@ def label_announcements(data_list: list[dict[Any, Any]]):
     classifier = MultinomialNB()
     classifier.fit(vectors, index_labels)
     predictions = classifier.predict(test_vectors)
-    # Apply the labels
+    # gan nhan du doan cho thong bao
     for i in range(len(data_list)):
         data_list[i]["topic"] = index_dictionary[predictions[i]]
     return data_list
