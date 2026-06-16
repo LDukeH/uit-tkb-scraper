@@ -14,6 +14,7 @@ announcement_collection = db["announcements"]
 
 schedule_collection = db["schedules"]
 exam_collection = db["exam_schedules"]
+tuition_collection = db["tuition_fees"]
 
 try:
 	# luu cache lich theo user thong tin ky thi luu rieng
@@ -35,5 +36,16 @@ try:
 		name="unique_user_exam_term"
 	)
 	exam_collection.create_index("expires_at", expireAfterSeconds=0, name="ttl_expires_at_exam")
+except Exception:
+	pass
+
+try:
+	# luu hoc phi theo user va ky
+	tuition_collection.create_index(
+		[("user_id", 1), ("hocky", 1), ("namhoc", 1)],
+		unique=True,
+		name="unique_user_tuition_term"
+	)
+	tuition_collection.create_index("expires_at", expireAfterSeconds=0, name="ttl_expires_at_tuition")
 except Exception:
 	pass
