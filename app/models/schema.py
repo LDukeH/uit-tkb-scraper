@@ -93,6 +93,23 @@ class StudentInfo(BaseModel):
     he_dao_tao: str
 
 
+class Deadline(BaseModel):
+    id: str
+    title: str
+    description: str = ""
+    course_code: str = ""
+    start: Optional[str] = None
+    end: Optional[str] = None
+    url: str = ""
+
+
+class DeadlineResponse(BaseModel):
+    success: bool
+    count: int
+    cached: bool
+    data: List[Deadline]
+
+
 class BankInfo(BaseModel):
     ten_tai_khoan: str
     so_tai_khoan: str

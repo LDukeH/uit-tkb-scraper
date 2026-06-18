@@ -49,3 +49,15 @@ try:
 	tuition_collection.create_index("expires_at", expireAfterSeconds=0, name="ttl_expires_at_tuition")
 except Exception:
 	pass
+
+deadlines_collection = db["deadlines"]
+
+try:
+	deadlines_collection.create_index(
+		[("user_id", 1), ("year", 1), ("month", 1)],
+		unique=True,
+		name="unique_user_month"
+	)
+	deadlines_collection.create_index("expires_at", expireAfterSeconds=0, name="ttl_expires_at_deadlines")
+except Exception:
+	pass
