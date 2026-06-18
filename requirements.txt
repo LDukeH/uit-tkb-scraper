@@ -10,3 +10,4 @@ python-dotenv
 python-jose
 scikit-learn
 certifi
+icalendar
