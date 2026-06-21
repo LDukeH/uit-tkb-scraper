@@ -61,3 +61,15 @@ try:
 	deadlines_collection.create_index("expires_at", expireAfterSeconds=0, name="ttl_expires_at_deadlines")
 except Exception:
 	pass
+
+grade_collection = db["grades"]
+
+try:
+	grade_collection.create_index(
+		[("user_id", 1), ("hocky", 1), ("namhoc", 1)],
+		unique=True,
+		name="unique_user_grade_term"
+	)
+	grade_collection.create_index("expires_at", expireAfterSeconds=0, name="ttl_expires_at_grade")
+except Exception:
+	pass

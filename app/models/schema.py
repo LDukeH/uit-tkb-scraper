@@ -129,3 +129,58 @@ class TuitionResponse(BaseModel):
     count: int
     data: Optional[TuitionData] = None
     timings_ms: Optional[dict] = None
+
+
+class GradeSubject(BaseModel):
+    stt: int
+    ma_hp: str
+    ten_hoc_phan: str
+    tin_chi: int
+    diem_qt: Optional[float] = None
+    diem_gk: Optional[float] = None
+    diem_th: Optional[float] = None
+    diem_ck: Optional[float] = None
+    diem_hp: Optional[str] = None  # string để xử lý trường hợp "Miễn"
+    ghi_chu: str = ""
+    trong_so: Optional[dict] = None
+
+
+class GradeSemester(BaseModel):
+    hocky: int
+    namhoc: int
+    so_tin_chi: Optional[float] = None
+    diem_trung_binh: Optional[str] = ""
+    subjects: List[GradeSubject] = []
+
+
+class GradeSummary(BaseModel):
+    so_tin_chi_da_hoc: Optional[float] = None
+    so_tin_chi_tich_luy: Optional[float] = None
+    diem_trung_binh_chung: Optional[float] = None
+    diem_trung_binh_chung_tich_luy: Optional[float] = None
+
+
+class StudentProfile(BaseModel):
+    ho_ten: str
+    mssv: str
+    ngay_sinh: str
+    gioi_tinh: str
+    lop_sinh_hoat: str
+    khoa: str
+    bac_dao_tao: str
+    he_dao_tao: str
+    nganh: str
+
+
+class GradeData(BaseModel):
+    student_profile: StudentProfile
+    semesters: List[GradeSemester]
+    summary: Optional[GradeSummary] = None
+
+
+class GradeResponse(BaseModel):
+    success: bool
+    cached: bool
+    count: int
+    data: Optional[GradeData] = None
+    timings_ms: Optional[dict] = None
