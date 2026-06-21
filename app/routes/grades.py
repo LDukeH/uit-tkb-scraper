@@ -31,7 +31,7 @@ def grades(
     try:
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")
 
-        # Try cache first
+        # tìm cache
         db_time_ms = None
         if username:
             t0 = time.perf_counter()
@@ -41,7 +41,7 @@ def grades(
             if cached and cached.get("semesters"):
                 semesters = cached["semesters"]
 
-                # Filter by hocky/namhoc if specified
+                # lọc theo năm và học kỳ nếu có
                 if hocky is not None and namhoc is not None:
                     semesters = [
                         s for s in semesters
@@ -64,7 +64,7 @@ def grades(
                     "timings_ms": {"db_read": round(db_time_ms, 1)},
                 }
 
-        # No cache — scrape
+        # không có cache -> scrape
         t1 = time.perf_counter()
         raw = get_grades(session)
         scrape_time_ms = (time.perf_counter() - t1) * 1000.0
@@ -73,7 +73,7 @@ def grades(
         all_semesters = raw.get("semesters") or []
         summary = raw.get("summary") or {}
 
-        # Save each semester to cache
+        # lưu cache vào db
         save_time_ms = None
         if username and all_semesters:
             t2 = time.perf_counter()
@@ -95,7 +95,7 @@ def grades(
                     pass
             save_time_ms = (time.perf_counter() - t2) * 1000.0
 
-        # Filter by hocky/namhoc if specified
+        # lọc theo năm và học kỳ nếu có
         semesters = all_semesters
         if hocky is not None and namhoc is not None:
             semesters = [

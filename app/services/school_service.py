@@ -199,10 +199,11 @@ BASE_URL = "https://student.uit.edu.vn"
 ANNOUNCEMENT_URL = BASE_URL + "/thong-bao-chung?page="
 
 def get_latest_announcement_node_id():
-    """Get the newest announcement node_id from MongoDB.
+    """Lấy node_id thông báo mới nhất từ MongoDB.
 
-    Returns the node_id of the most recently stored announcement,
-    or None if the DB is empty.
+    Returns:
+        node_id của thông báo được lưu gần đây nhất,
+        hoặc None nếu DB trống.
     """
     try:
         from app.core.db import announcement_collection
@@ -217,7 +218,7 @@ def get_latest_announcement_node_id():
 
 def get_all_announcements(max_pages=10):
     results = []
-    # Get the newest known node_id from DB to stop early
+    # Lấy node_id mới nhất từ DB để dừng sớm
     latest_node_id = get_latest_announcement_node_id()
     if latest_node_id:
         print(f"Latest known announcement node_id: {latest_node_id} — will stop when encountered")
@@ -240,8 +241,8 @@ def get_all_announcements(max_pages=10):
                 data = parse_article(article)
                 if data:
                     results.append(data)
-                    # Early stop: if this article already exists in DB,
-                    # everything after it on this page and later pages is also old
+                    # Dừng sớm: nếu thông báo này đã có trong DB,
+                    # mọi thông báo sau nó trên trang này và các trang sau đều cũ
                     if latest_node_id and data["node_id"] == latest_node_id:
                         print(f"Reached known announcement {data['node_id']} — stopping early")
                         return results
@@ -358,7 +359,7 @@ def parse_table(table) -> str:
     for i, row in enumerate(table_data):
         padded = [row[j].ljust(col_widths[j]) for j in range(col_count)]
         lines.append("| " + " | ".join(padded) + " |")
-        if i == 0:  # header separator
+        if i == 0:  # dòng phân cách header
             lines.append("| " + " | ".join("-" * col_widths[j] for j in range(col_count)) + " |")
 
     return "\n".join(lines)
@@ -428,10 +429,10 @@ def get_all_announcements_full(max_pages=10) -> list:
 
 
 def load_cached_schedule(user_id: str):
-    """Return cached schedule document for given user_id.
+    """Lấy tkb đã cache từ DB theo user_id.
 
-    Note: schedule cache is stored per-user only; exam schedules (lanthi/hocky/namhoc)
-    are stored separately if needed.
+    Note: cache tkb được lưu theo từng user; lịch thi (lanthi/hocky/namhoc)
+    được lưu riêng nếu cần.
     """
     try:
         from app.core.db import schedule_collection
@@ -443,9 +444,9 @@ def load_cached_schedule(user_id: str):
 
 
 def save_schedule(user_id: str, schedule_rows: list, ttl_days: int = None):
-    """Upsert schedule for user with an expiry (`expires_at`).
+    """Lưu hoặc cập nhật tkb cho user với thời gian hết hạn (`expires_at`).
 
-    `ttl_days` defaults to env `SCHEDULE_CACHE_TTL_DAYS` or 7 days.
+    `ttl_days` mặc định lấy từ env `SCHEDULE_CACHE_TTL_DAYS` hoặc 7 ngày.
     """
     try:
         from app.core.db import schedule_collection
@@ -478,7 +479,7 @@ def save_schedule(user_id: str, schedule_rows: list, ttl_days: int = None):
 
 
 def load_cached_exam_schedule(user_id: str, lanthi: int, hocky: int, namhoc: int):
-    """Return cached exam schedule for a user and term."""
+    """Lấy lịch thi đã cache từ DB theo user và học kỳ."""
     try:
         from app.core.db import exam_collection
         return exam_collection.find_one(
@@ -491,7 +492,7 @@ def load_cached_exam_schedule(user_id: str, lanthi: int, hocky: int, namhoc: int
 
 
 def save_exam_schedule(user_id: str, lanthi: int, hocky: int, namhoc: int, exam_rows: list, ttl_days: int = None):
-    """Upsert exam schedule for a user/term with expiry."""
+    """Lưu hoặc cập nhật lịch thi cho user/học kỳ với thời gian hết hạn."""
     try:
         from app.core.db import exam_collection
 
@@ -526,10 +527,11 @@ def save_exam_schedule(user_id: str, lanthi: int, hocky: int, namhoc: int, exam_
 
 
 def get_exam_schedule(session, lanthi: int = 1, hocky: int = 1, namhoc: int = 2025) -> list:
-    """Fetch exam schedule (lich thi) for given parameters using an authenticated session.
+    """Lấy lịch thi với các tham số đã cho bằng session đã xác thực.
 
-    Returns list of rows with keys: `stt`, `ma_mh`, `ma_lop`, `ca_tiet_thi`, `thu_thi`,
-    `ngay_thi`, `phong_thi`, `ghi_chu`.
+    Returns:
+        Danh sách các dòng với keys: `stt`, `ma_mh`, `ma_lop`, `ca_tiet_thi`, `thu_thi`,
+        `ngay_thi`, `phong_thi`, `ghi_chu`.
     """
     url = BASE_URL + "/sinhvien/lichhoc/lichthi"
     params = {"lanthi": str(lanthi), "hocky": str(hocky), "namhoc": str(namhoc)}
@@ -551,7 +553,7 @@ def get_exam_schedule(session, lanthi: int = 1, hocky: int = 1, namhoc: int = 20
             if not cols:
                 continue
 
-            # map cot sang truong xu ly thieu cell
+            # ánh xạ cột sang trường, xử lý thiếu cell
             def col(i):
                 return cols[i] if i < len(cols) else ""
 
@@ -583,10 +585,11 @@ TUITION_URL = BASE_URL + "/tracuu/hocphi"
 
 
 def get_tuition_fee(session) -> dict:
-    """Scrape tuition fee page using an authenticated session.
+    """Scrape trang học phí bằng session đã xác thực.
 
-    Returns a dict with keys: `student_info`, `bank_info`, `semesters`.
-    Each semester in `semesters` includes `chi_tiet_mon` (subject detail list).
+    Returns:
+        dict với keys: `student_info`, `bank_info`, `semesters`.
+        Mỗi học kỳ trong `semesters` bao gồm `chi_tiet_mon` (danh sách chi tiết môn).
     """
     try:
         res = session.get(TUITION_URL, timeout=10)
@@ -595,7 +598,7 @@ def get_tuition_fee(session) -> dict:
 
         soup = BeautifulSoup(res.text, "html.parser")
 
-        # --- Student info ---
+        # --- Thông tin sinh viên ---
         student_info = {}
         student_table = soup.select_one("#edit-thongtinsv table")
         if student_table:
@@ -616,14 +619,14 @@ def get_tuition_fee(session) -> dict:
                 elif "Hệ đào tạo" in label:
                     student_info["he_dao_tao"] = value
 
-        # Defaults for missing fields
+        # Giá trị mặc định cho các trường thiếu
         student_info.setdefault("ho_ten", "")
         student_info.setdefault("mssv", "")
         student_info.setdefault("ngay_sinh", "")
         student_info.setdefault("khoa", "")
         student_info.setdefault("he_dao_tao", "")
 
-        # --- Bank info ---
+        # --- Thông tin ngân hàng ---
         bank_info = {}
         bank_div = soup.select_one("#edit-thongtinsv hr ~ div")
         if bank_div:
@@ -644,16 +647,16 @@ def get_tuition_fee(session) -> dict:
         bank_info.setdefault("ngan_hang", "")
         bank_info.setdefault("noi_dung_chuyen_khoan", "")
 
-        # --- Semester fieldsets ---
+        # --- Fieldsets học kỳ ---
         semesters = []
         all_fieldsets = soup.select("fieldset.container-inline")
         for fs in all_fieldsets:
             fs_id = fs.get("id", "")
-            # Only process tuition-semester fieldsets (skip thongtinsv)
+            # Chỉ xử lý fieldsets học kỳ (bỏ qua thongtinsv)
             if not fs_id.startswith("edit-thongtinhp-"):
                 continue
 
-            # Parse hocky and namhoc from id: edit-thongtinhp-{hocky}-{namhoc}
+            # Parse hocky và namhoc từ id: edit-thongtinhp-{hocky}-{namhoc}
             match = re.match(r"edit-thongtinhp-(\d+)-(\d+)", fs_id)
             if not match:
                 continue
@@ -677,7 +680,7 @@ def get_tuition_fee(session) -> dict:
                 "chi_tiet_mon": [],
             }
 
-            # Extract rows from main table
+            # Lấy các dòng từ bảng chính
             main_table = fs.select_one("table")
             if main_table:
                 for row in main_table.find_all("tr"):
@@ -710,7 +713,7 @@ def get_tuition_fee(session) -> dict:
                     elif "Ghi chú" in label:
                         sem_data["ghi_chu"] = value
 
-            # Extract chi_tiet_mon from hidden div
+            # Lấy chi_tiet_mon từ div ẩn
             detail_div = fs.select_one(f"div[id^='chitiethp']")
             if detail_div:
                 detail_table = detail_div.select_one("table")
@@ -827,7 +830,7 @@ def load_all_cached_tuition(user_id: str):
         if not docs:
             return None
 
-        # Reconstruct TuitionData structure
+        # Tái cấu trúc dữ liệu TuitionData
         student_info = docs[0].get("student_info", {})
         bank_info = docs[0].get("bank_info", {})
 
@@ -864,16 +867,17 @@ GRADES_URL = BASE_URL + "/sinhvien/kqhoctap"
 
 
 def get_grades(session) -> dict:
-    """Scrape course grades page using an authenticated session.
+    """Scrape trang điểm học phần bằng session đã xác thực.
 
-    The page returns grades for all semesters in one table. This function
-    must POST the Drupal form (with form_build_id, form_token, form_id)
-    to get the actual grade data.
+    Trang trả về điểm của tất cả học kỳ trong một bảng. Hàm này
+    cần POST form Drupal (với form_build_id, form_token, form_id)
+    để lấy dữ liệu điểm thực tế.
 
-    Returns a dict with keys: `student_profile`, `semesters`, `summary`.
+    Returns:
+        dict với keys: `student_profile`, `semesters`, `summary`.
     """
     try:
-        # First GET to extract form tokens
+        # Đầu tiên GET để lấy form tokens
         get_res = session.get(GRADES_URL, timeout=10)
         if get_res.status_code != 200:
             return {"student_profile": None, "semesters": [], "summary": None}
@@ -881,26 +885,26 @@ def get_grades(session) -> dict:
         soup_get = BeautifulSoup(get_res.text, "html.parser")
         form = soup_get.select_one("form#uit-sinhvien-tracuu-kqhoctap")
         if not form:
-            # Try direct parse if form not found (might already show data)
+            # Thử parse trực tiếp nếu không tìm thấy form (có thể đã hiển thị dữ liệu)
             soup = soup_get
         else:
-            # Extract form tokens and POST
+            # Lấy form tokens và POST
             payload = {}
             for inp in form.find_all("input"):
                 name = inp.get("name")
                 if name:
                     payload[name] = inp.get("value", "")
-            # POST to get grade data
+            # POST để lấy dữ liệu điểm
             post_res = session.post(GRADES_URL, data=payload, timeout=10)
             if post_res.status_code != 200:
                 return {"student_profile": None, "semesters": [], "summary": None}
             soup = BeautifulSoup(post_res.text, "html.parser")
-            # Re-find form in response
+            # Tìm lại form trong response
             form = soup.select_one("form#uit-sinhvien-tracuu-kqhoctap")
             if not form:
                 return {"student_profile": None, "semesters": [], "summary": None}
 
-        # --- Student profile (first table) ---
+        # --- Thông tin sinh viên (bảng đầu tiên) ---
         profile = {"ho_ten": "", "mssv": "", "ngay_sinh": "", "gioi_tinh": "",
                    "lop_sinh_hoat": "", "khoa": "", "bac_dao_tao": "",
                    "he_dao_tao": "", "nganh": ""}
@@ -932,7 +936,7 @@ def get_grades(session) -> dict:
                     elif "Ngành" in label:
                         profile["nganh"] = value
 
-        # --- Grade table (second table) ---
+        # --- Bảng điểm (bảng thứ hai) ---
         all_tables = soup.find_all("table")
         grade_table = all_tables[1] if len(all_tables) > 1 else None
 
@@ -948,18 +952,18 @@ def get_grades(session) -> dict:
         if grade_table:
             rows = grade_table.find_all("tr")
             for row in rows:
-                # Check for semester header
+                # Kiểm tra header học kỳ
                 tds = row.find_all("td")
                 cols = row.find_all(["td", "th"])
                 col_texts = [c.get_text(strip=True).replace("\xa0", " ").strip() for c in cols]
                 colspan = tds[0].get("colspan") if tds else None
 
-                # Detect semester header
+                # Phát hiện header học kỳ
                 if colspan and colspan == "10" and len(tds) == 1:
                     text = tds[0].get_text(strip=True).replace("\xa0", " ")
                     match = re.search(r"Học kỳ\s*(\d+)\s*-\s*Năm học\s*(\d+)-(\d+)", text)
                     if match:
-                        # Save previous semester
+                        # Lưu học kỳ trước
                         if current_sem and current_sem["subjects"]:
                             semesters.append(current_sem)
                         hocky = int(match.group(1))
@@ -973,11 +977,11 @@ def get_grades(session) -> dict:
                         }
                     continue
 
-                # Detect summary footer rows (always at the end of the table)
+                # Phát hiện dòng tổng kết footer (luôn ở cuối bảng)
                 if cols and len(col_texts) >= 2:
-                    # Summary rows have the label in the first cell (colspan=3)
+                    # Dòng tổng kết có nhãn ở ô đầu tiên (colspan=3)
                     label = col_texts[0] if len(col_texts) > 0 else ""
-                    # Find the value cell — it's the second <td> with <strong>
+                    # Tìm ô giá trị — là <td> thứ hai có <strong>
                     value_cell = ""
                     for cell in cols:
                         strong = cell.find("strong")
@@ -1018,14 +1022,14 @@ def get_grades(session) -> dict:
                                 break
                         continue
 
-                # Detect semester summary row ("Trung bình học kỳ")
+                # Phát hiện dòng tổng kết học kỳ ("Trung bình học kỳ")
                 if current_sem and col_texts and "Trung bình học kỳ" in (col_texts[2] if len(col_texts) > 2 else ""):
                     try:
                         tc_str = col_texts[3] if len(col_texts) > 3 else "0"
                         current_sem["so_tin_chi"] = float(tc_str)
                     except:
                         pass
-                    # diem_trung_binh is in the last <td> with <strong>
+                    # diem_trung_binh nằm ở <td> cuối có <strong>
                     for cell in cols:
                         strong = cell.find("strong")
                         if strong:
@@ -1035,13 +1039,13 @@ def get_grades(session) -> dict:
                                 current_sem["diem_trung_binh"] = strong.get_text(strip=True)
                     continue
 
-                # Detect subject row
+                # Phát hiện dòng môn học
                 if current_sem and len(tds) >= 6:
                     stt_text = tds[0].get_text(strip=True)
                     if not stt_text or not stt_text.isdigit():
                         continue  # skip non-subject rows (spacers, etc.)
 
-                    # Parse subject scores
+                    # Parse điểm các môn
                     def parse_score(td):
                         text = td.get_text(strip=True)
                         if not text:
@@ -1080,7 +1084,7 @@ def get_grades(session) -> dict:
                     if w_ck is not None:
                         trong_so["ck"] = w_ck
 
-                    # Điểm HP — could be float or "Miễn"
+                    # Điểm HP — có thể là float hoặc "Miễn"
                     diem_hp_raw = tds[8].get_text(strip=True) if len(tds) > 8 else ""
                     diem_hp = diem_hp_raw if diem_hp_raw else None
 
@@ -1101,7 +1105,7 @@ def get_grades(session) -> dict:
                     }
                     current_sem["subjects"].append(subject)
 
-            # Save last semester
+            # Lưu học kỳ cuối
             if current_sem and current_sem["subjects"]:
                 semesters.append(current_sem)
 
@@ -1134,16 +1138,16 @@ def load_cached_grade(user_id: str, hocky: int, namhoc: int):
 def save_grade(user_id: str, hocky: int, namhoc: int,
                student_profile: dict, sem_data: dict, summary: dict,
                ttl_days: int = None):
-    """Upsert grade data for a user/term with smart expiry.
+    """Lưu hoặc cập nhật điểm cho user/học kỳ với TTL thông minh.
 
-    Finalized semesters (diem_trung_binh != 0) → 365 days TTL.
-    In-progress semesters (diem_trung_binh == 0 or empty) → 1 day TTL.
+    Học kỳ đã hoàn thành (diem_trung_binh != 0) → TTL 365 ngày.
+    Học kỳ đang xử lý (diem_trung_binh == 0 hoặc rỗng) → TTL 1 ngày.
     """
     try:
         from app.core.db import grade_collection
 
         if ttl_days is None:
-            # Smart TTL: if final grade exists and != 0, cache long
+            # TTL thông minh: nếu điểm cuối kỳ tồn tại và != 0, cache lâu
             diem_tb = sem_data.get("diem_trung_binh")
             try:
                 if diem_tb is not None and diem_tb != "" and float(diem_tb) != 0:

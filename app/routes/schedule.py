@@ -27,10 +27,10 @@ def schedule(authorization: str = Header(None)):
         raise HTTPException(status_code=401, detail="Session expired")
 
     try:
-        # tim va lay cache theo username
+        # tìm và lấy cache theo username
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")
 
-        # tinh toan thoi gian doc db
+        # tính toán thời gian đọc db
         db_time_ms = None
         if username:
             t0 = time.perf_counter()
@@ -39,7 +39,7 @@ def schedule(authorization: str = Header(None)):
             if cached and cached.get("schedule"):
                 return {"success": True, "count": len(cached.get("schedule")), "data": cached.get("schedule"), "cached": True, "timings_ms": {"db_read": round(db_time_ms, 1)}}
 
-        # khong co cache scrape va luu tinh toan thoi gian
+        # không có cache -> scrape và lưu, tính toán thời gian
         t1 = time.perf_counter()
         data = get_schedule(session)
         scrape_time_ms = (time.perf_counter() - t1) * 1000.0

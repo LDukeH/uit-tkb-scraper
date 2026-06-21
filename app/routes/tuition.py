@@ -31,7 +31,7 @@ def tuition(
     try:
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")
 
-        # Try cache first
+        # Thử cache trước
         db_time_ms = None
         if username:
             t0 = time.perf_counter()
@@ -41,7 +41,7 @@ def tuition(
             if cached and cached.get("semesters"):
                 semesters = cached["semesters"]
 
-                # Filter by hocky/namhoc if specified
+                # Lọc theo học kỳ/năm học nếu có
                 if hocky is not None and namhoc is not None:
                     semesters = [
                         s for s in semesters
@@ -64,7 +64,7 @@ def tuition(
                     "timings_ms": {"db_read": round(db_time_ms, 1)},
                 }
 
-        # No cache — scrape
+        # Không có cache — scrape
         t1 = time.perf_counter()
         raw = get_tuition_fee(session)
         scrape_time_ms = (time.perf_counter() - t1) * 1000.0
@@ -73,7 +73,7 @@ def tuition(
         bank_info = raw.get("bank_info") or {}
         all_semesters = raw.get("semesters") or []
 
-        # Save each semester to cache
+        # Lưu từng học kỳ vào cache
         save_time_ms = None
         if username and all_semesters:
             t2 = time.perf_counter()
@@ -104,7 +104,7 @@ def tuition(
                     pass
             save_time_ms = (time.perf_counter() - t2) * 1000.0
 
-        # Filter by hocky/namhoc if specified
+        # Lọc theo học kỳ/năm học nếu có
         semesters = all_semesters
         if hocky is not None and namhoc is not None:
             semesters = [

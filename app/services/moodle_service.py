@@ -84,7 +84,7 @@ class MoodleClient:
             if not self._fetch_export_page():
                 if not self._login_via_token():
                     return None
-                # try getting export token via REST
+                # thử lấy export token qua REST
                 params = {
                     "wstoken": self.wstoken,
                     "wsfunction": "core_calendar_get_calendar_export_token",
@@ -160,6 +160,7 @@ class MoodleClient:
 
     def get_deadlines(self, year: Optional[int] = None,
                       month: Optional[int] = None) -> list[dict]:
+        """Lấy danh sách deadline trong tháng/năm cụ thể."""
         now = datetime.now()
         if year is None:
             year = now.year

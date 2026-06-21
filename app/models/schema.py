@@ -140,7 +140,7 @@ class GradeSubject(BaseModel):
     diem_gk: Optional[float] = None
     diem_th: Optional[float] = None
     diem_ck: Optional[float] = None
-    diem_hp: Optional[str] = None  # string to handle "Miễn" (exempt)
+    diem_hp: Optional[str] = None  # string để xử lý trường hợp "Miễn"
     ghi_chu: str = ""
     trong_so: Optional[dict] = None
 
