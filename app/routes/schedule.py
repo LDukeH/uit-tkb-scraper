@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, Header
-import time
 
 from app.services.school_service import (
     get_schedule,
@@ -11,6 +10,7 @@ from app.services.school_service import (
     SESSION_STORE,
 )
 from app.services.school_service import get_exam_schedule
+from app.services.school.schedule import transform_exam_schedule
 
 router = APIRouter(prefix="/schedule", tags=["Schedule"])
 
@@ -31,35 +31,21 @@ def schedule(authorization: str = Header(None)):
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")
 
         # tính toán thời gian đọc db
-        db_time_ms = None
         if username:
-            t0 = time.perf_counter()
             cached = load_cached_schedule(username)
-            db_time_ms = (time.perf_counter() - t0) * 1000.0
             if cached and cached.get("schedule"):
-                return {"success": True, "count": len(cached.get("schedule")), "data": cached.get("schedule"), "cached": True, "timings_ms": {"db_read": round(db_time_ms, 1)}}
+                return {"success": True, "count": len(cached.get("schedule")), "data": cached.get("schedule"), "cached": True}
 
-        # không có cache -> scrape và lưu, tính toán thời gian
-        t1 = time.perf_counter()
+        # không có cache -> scrape và lưu
         data = get_schedule(session)
-        scrape_time_ms = (time.perf_counter() - t1) * 1000.0
 
-        save_time_ms = None
         if username:
-            t2 = time.perf_counter()
             try:
                 save_schedule(username, data)
             except Exception:
                 pass
-            save_time_ms = (time.perf_counter() - t2) * 1000.0
 
-        timings = {"scrape": round(scrape_time_ms, 1)}
-        if db_time_ms is not None:
-            timings["db_read"] = round(db_time_ms, 1)
-        if save_time_ms is not None:
-            timings["db_write"] = round(save_time_ms, 1)
-
-        return {"success": True, "count": len(data), "data": data, "cached": False, "timings_ms": timings}
+        return {"success": True, "count": len(data), "data": data, "cached": False}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -79,39 +65,25 @@ def exam_schedule(lanthi: int = 1, hocky: int = 1, namhoc: int = 2025, authoriza
     try:
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")
 
-        db_time_ms = None
         if username:
-            t0 = time.perf_counter()
             cached = load_cached_exam_schedule(username, lanthi, hocky, namhoc)
-            db_time_ms = (time.perf_counter() - t0) * 1000.0
             if cached and cached.get("exam_schedule"):
                 return {
                     "success": True,
                     "count": len(cached.get("exam_schedule")),
                     "data": cached.get("exam_schedule"),
                     "cached": True,
-                    "timings_ms": {"db_read": round(db_time_ms, 1)}
                 }
 
-        t1 = time.perf_counter()
         data = get_exam_schedule(session, lanthi=lanthi, hocky=hocky, namhoc=namhoc)
-        scrape_time_ms = (time.perf_counter() - t1) * 1000.0
+        transformed = transform_exam_schedule(data)
 
-        save_time_ms = None
         if username:
-            t2 = time.perf_counter()
             try:
-                save_exam_schedule(username, lanthi, hocky, namhoc, data)
+                save_exam_schedule(username, lanthi, hocky, namhoc, transformed)
             except Exception:
                 pass
-            save_time_ms = (time.perf_counter() - t2) * 1000.0
 
-        timings = {"scrape": round(scrape_time_ms, 1)}
-        if db_time_ms is not None:
-            timings["db_read"] = round(db_time_ms, 1)
-        if save_time_ms is not None:
-            timings["db_write"] = round(save_time_ms, 1)
-
-        return {"success": True, "count": len(data), "data": data, "cached": False, "timings_ms": timings}
+        return {"success": True, "count": len(transformed), "data": transformed, "cached": False}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

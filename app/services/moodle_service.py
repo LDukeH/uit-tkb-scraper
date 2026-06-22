@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from icalendar import Calendar
 
@@ -158,6 +158,28 @@ class MoodleClient:
 
         return events
 
+    @staticmethod
+    def enrich_deadline(event: dict) -> dict:
+        """Thêm status và days_remaining vào event."""
+        enriched = dict(event)
+        deadline_str = event.get("deadline") or event.get("start")
+        if not deadline_str:
+            enriched["status"] = "UNKNOWN"
+            enriched["days_remaining"] = 0
+            return enriched
+
+        try:
+            dt = datetime.fromisoformat(deadline_str)
+            now = datetime.now()
+            delta = (dt - now).total_seconds() / 86400.0
+            enriched["days_remaining"] = int(delta)
+            enriched["status"] = "OVERDUE" if delta < 0 else "UPCOMING"
+        except (ValueError, TypeError):
+            enriched["status"] = "UNKNOWN"
+            enriched["days_remaining"] = 0
+
+        return enriched
+
     def get_deadlines(self, year: Optional[int] = None,
                       month: Optional[int] = None) -> list[dict]:
         """Lấy danh sách deadline trong tháng/năm cụ thể."""
@@ -186,4 +208,4 @@ class MoodleClient:
             else:
                 filtered.append(e)
 
-        return filtered
+        return [self.enrich_deadline(ev) for ev in filtered]

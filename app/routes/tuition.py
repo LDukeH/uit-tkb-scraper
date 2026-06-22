@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, Header, Query
 from typing import Optional
-import time
 
 from app.services.school_service import (
     get_tuition_fee,
@@ -9,6 +8,7 @@ from app.services.school_service import (
     save_tuition,
     SESSION_STORE,
 )
+from app.services.school.tuition import transform_tuition_response
 
 router = APIRouter(prefix="/tuition", tags=["Tuition"])
 
@@ -32,12 +32,8 @@ def tuition(
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")
 
         # Thử cache trước
-        db_time_ms = None
         if username:
-            t0 = time.perf_counter()
             cached = load_all_cached_tuition(username)
-            db_time_ms = (time.perf_counter() - t0) * 1000.0
-
             if cached and cached.get("semesters"):
                 semesters = cached["semesters"]
 
@@ -52,31 +48,28 @@ def tuition(
                 elif namhoc is not None:
                     semesters = [s for s in semesters if s["namhoc"] == namhoc]
 
+                raw = {
+                    "student_info": cached.get("student_info", {}),
+                    "bank_info": cached.get("bank_info", {}),
+                    "semesters": semesters,
+                }
+                result = transform_tuition_response(raw, username=username)
+
                 return {
                     "success": True,
                     "cached": True,
-                    "count": len(semesters),
-                    "data": {
-                        "student_info": cached["student_info"],
-                        "bank_info": cached["bank_info"],
-                        "semesters": semesters,
-                    },
-                    "timings_ms": {"db_read": round(db_time_ms, 1)},
+                    **result,
                 }
 
         # Không có cache — scrape
-        t1 = time.perf_counter()
         raw = get_tuition_fee(session)
-        scrape_time_ms = (time.perf_counter() - t1) * 1000.0
 
         student_info = raw.get("student_info") or {}
         bank_info = raw.get("bank_info") or {}
         all_semesters = raw.get("semesters") or []
 
         # Lưu từng học kỳ vào cache
-        save_time_ms = None
         if username and all_semesters:
-            t2 = time.perf_counter()
             for sem in all_semesters:
                 try:
                     save_tuition(
@@ -102,7 +95,6 @@ def tuition(
                     )
                 except Exception:
                     pass
-            save_time_ms = (time.perf_counter() - t2) * 1000.0
 
         # Lọc theo học kỳ/năm học nếu có
         semesters = all_semesters
@@ -116,22 +108,115 @@ def tuition(
         elif namhoc is not None:
             semesters = [s for s in semesters if s["namhoc"] == namhoc]
 
-        timings = {"scrape": round(scrape_time_ms, 1)}
-        if db_time_ms is not None:
-            timings["db_read"] = round(db_time_ms, 1)
-        if save_time_ms is not None:
-            timings["db_write"] = round(save_time_ms, 1)
+        raw_filtered = {
+            "student_info": student_info,
+            "bank_info": bank_info,
+            "semesters": semesters,
+        }
+        result = transform_tuition_response(raw_filtered, username=username or "")
 
         return {
             "success": True,
             "cached": False,
-            "count": len(semesters),
-            "data": {
-                "student_info": student_info,
-                "bank_info": bank_info,
-                "semesters": semesters,
-            },
-            "timings_ms": timings,
+            **result,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/summary")
+def tuition_summary(authorization: str = Header(None)):
+    """Lightweight endpoint for Home screen — returns only remaining balance and latest semester."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    token = authorization.replace("Bearer ", "")
+    session = get_valid_session(token)
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Session expired")
+
+    try:
+        username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")
+
+        # Try cache first
+        if username:
+            cached = load_all_cached_tuition(username)
+            if cached and cached.get("semesters"):
+                raw = {
+                    "student_info": cached.get("student_info", {}),
+                    "bank_info": cached.get("bank_info", {}),
+                    "semesters": cached["semesters"],
+                }
+                result = transform_tuition_response(raw, username=username)
+                semesters = result.get("semesters", [])
+                summary = result.get("summary", {})
+
+                latest = semesters[0] if semesters else None
+                latest_semester = ""
+                status = "UNPAID"
+                if latest:
+                    latest_semester = f"HK{latest['hocky']} {latest['namhoc']}"
+                    status = latest.get("status", "UNPAID")
+
+                return {
+                    "success": True,
+                    "cached": True,
+                    "remaining": summary.get("remaining", 0),
+                    "latest_semester": latest_semester,
+                    "status": status,
+                }
+
+        # No cache — scrape
+        raw = get_tuition_fee(session)
+        result = transform_tuition_response(raw, username=username or "")
+        semesters = result.get("semesters", [])
+        summary = result.get("summary", {})
+
+        latest = semesters[0] if semesters else None
+        latest_semester = ""
+        status = "UNPAID"
+        if latest:
+            latest_semester = f"HK{latest['hocky']} {latest['namhoc']}"
+            status = latest.get("status", "UNPAID")
+
+        # Save to cache
+        if username and raw.get("semesters"):
+            student_info = raw.get("student_info") or {}
+            bank_info = raw.get("bank_info") or {}
+            for sem in raw["semesters"]:
+                try:
+                    save_tuition(
+                        username,
+                        sem["hocky"],
+                        sem["namhoc"],
+                        student_info,
+                        bank_info,
+                        {
+                            "so_tc_dang_ky": sem.get("so_tc_dang_ky", ""),
+                            "mon_dang_ky": sem.get("mon_dang_ky", ""),
+                            "hoc_phi": sem.get("hoc_phi", ""),
+                            "phi_khac": sem.get("phi_khac", ""),
+                            "so_tien_phai_dong": sem.get("so_tien_phai_dong", ""),
+                            "no_hoc_ky_truoc": sem.get("no_hoc_ky_truoc", ""),
+                            "so_tien_da_dong": sem.get("so_tien_da_dong", ""),
+                            "con_no": sem.get("con_no", ""),
+                            "ngan_hang": sem.get("ngan_hang", ""),
+                            "thoi_gian_dong": sem.get("thoi_gian_dong", ""),
+                            "ghi_chu": sem.get("ghi_chu", ""),
+                            "chi_tiet_mon": sem.get("chi_tiet_mon", []),
+                        },
+                    )
+                except Exception:
+                    pass
+
+        return {
+            "success": True,
+            "cached": False,
+            "remaining": summary.get("remaining", 0),
+            "latest_semester": latest_semester,
+            "status": status,
         }
 
     except Exception as e:

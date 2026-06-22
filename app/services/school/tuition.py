@@ -190,6 +190,103 @@ def get_tuition_fee(session) -> dict:
         return {"student_info": None, "bank_info": None, "semesters": []}
 
 
+def _parse_amount(value: str) -> int:
+    """Parse a Vietnamese currency string like '4.500.000' or '4,500,000' to int."""
+    if not value:
+        return 0
+    cleaned = re.sub(r"[^\d]", "", value)
+    try:
+        return int(cleaned)
+    except ValueError:
+        return 0
+
+
+def _parse_semester_status(sem_data: dict) -> str:
+    """Determine PAID or UNPAID from semester data."""
+    con_no = sem_data.get("con_no", "")
+    so_tien_da_dong = sem_data.get("so_tien_da_dong", "")
+    if con_no:
+        amount = _parse_amount(con_no)
+        if amount > 0:
+            return "UNPAID"
+    if so_tien_da_dong:
+        amount = _parse_amount(so_tien_da_dong)
+        if amount > 0:
+            return "PAID"
+    return "UNPAID"
+
+
+def _parse_deadline(sem_data: dict) -> str:
+    """Extract deadline date from 'thoi_gian_dong' field if present."""
+    thoi_gian_dong = sem_data.get("thoi_gian_dong", "")
+    if not thoi_gian_dong:
+        return ""
+    patterns = [
+        r"(\d{4}-\d{2}-\d{2})",
+        r"(\d{2}/\d{2}/\d{4})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, thoi_gian_dong)
+        if match:
+            raw = match.group(1)
+            if raw.startswith("20"):
+                return raw
+            parts = raw.split("/")
+            if len(parts) == 3:
+                return f"{parts[2]}-{parts[1]}-{parts[0]}"
+    return ""
+
+
+def transform_tuition_response(raw: dict, username: str = "") -> dict:
+    """Transform raw scraper output into the simplified API response format."""
+    student_info = raw.get("student_info") or {}
+    semesters = raw.get("semesters") or []
+
+    student = {
+        "name": student_info.get("ho_ten", ""),
+        "student_id": student_info.get("mssv", username),
+    }
+
+    transformed_semesters = []
+    total_due = 0
+    total_paid = 0
+
+    for sem in semesters:
+        con_no = sem.get("con_no", "")
+        so_tien_da_dong = sem.get("so_tien_da_dong", "")
+        so_tien_phai_dong = sem.get("so_tien_phai_dong", "")
+
+        remaining = _parse_amount(con_no) if con_no else _parse_amount(so_tien_phai_dong)
+        paid = _parse_amount(so_tien_da_dong)
+
+        status = _parse_semester_status(sem)
+        deadline = _parse_deadline(sem)
+
+        transformed_semesters.append({
+            "namhoc": sem.get("namhoc"),
+            "hocky": sem.get("hocky"),
+            "sotien": remaining,
+            "status": status,
+            "deadline": deadline,
+        })
+
+        total_due += remaining
+        total_paid += paid
+
+    summary = {
+        "total_due": total_due,
+        "paid": total_paid,
+        "remaining": total_due,
+    }
+
+    return {
+        "success": True,
+        "student": student,
+        "summary": summary,
+        "semesters": transformed_semesters,
+    }
+
+
 def load_cached_tuition(user_id: str, hocky: int, namhoc: int):
     """Return cached tuition document for a user and term."""
     try:
