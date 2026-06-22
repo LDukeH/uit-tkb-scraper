@@ -9,6 +9,16 @@ from app.services.school.constants import (
     SCHEDULE_URL, BASE_URL, DAYS, PERIOD_TIME,
 )
 
+WEEKDAY_NAMES = {
+    "2": "Thứ Hai",
+    "3": "Thứ Ba",
+    "4": "Thứ Tư",
+    "5": "Thứ Năm",
+    "6": "Thứ Sáu",
+    "7": "Thứ Bảy",
+    "8": "Chủ Nhật",
+}
+
 
 def get_schedule(session):
     res = session.get(SCHEDULE_URL)
@@ -221,6 +231,67 @@ def save_exam_schedule(user_id: str, lanthi: int, hocky: int, namhoc: int, exam_
     except Exception as e:
         print(f"Error saving exam schedule: {e}")
         return False
+
+
+def transform_exam_schedule(raw: list) -> list:
+    """Chuyển raw exam schedule thành format API đã tối ưu."""
+    result = []
+    for item in raw:
+        ngay_thi = item.get("ngay_thi", "")
+        exam_date = ""
+        exam_datetime = ""
+        if ngay_thi:
+            try:
+                dt = datetime.strptime(ngay_thi, "%d-%m-%Y")
+                exam_date = dt.strftime("%Y-%m-%d")
+                exam_datetime = dt.isoformat()
+            except (ValueError, TypeError):
+                exam_date = ngay_thi
+                exam_datetime = ""
+
+        ca_tiet_thi = item.get("ca_tiet_thi", "")
+        exam_shift = ca_tiet_thi
+        start_time = ""
+        end_time = ""
+        if ca_tiet_thi:
+            match = re.search(r"Ca\s*(\d+)", ca_tiet_thi)
+            if match:
+                ca_num = int(match.group(1))
+                time_range = PERIOD_TIME.get(ca_num, "")
+                if "-" in time_range:
+                    start_time, end_time = time_range.split("-", 1)
+                    exam_datetime = f"{exam_date}T{start_time}:00" if exam_date else ""
+
+        thu_thi = item.get("thu_thi", "")
+        weekday = WEEKDAY_NAMES.get(str(thu_thi), thu_thi)
+
+        status = "UNKNOWN"
+        days_remaining = 0
+        if exam_datetime:
+            try:
+                dt = datetime.fromisoformat(exam_datetime)
+                now = datetime.now()
+                delta = (dt - now).total_seconds() / 86400.0
+                days_remaining = int(delta)
+                status = "COMPLETED" if delta < 0 else "UPCOMING"
+            except (ValueError, TypeError):
+                pass
+
+        result.append({
+            "stt": item.get("stt"),
+            "course_code": item.get("ma_mh", ""),
+            "class_code": item.get("ma_lop", ""),
+            "exam_date": exam_date,
+            "exam_datetime": exam_datetime,
+            "exam_shift": exam_shift,
+            "start_time": start_time,
+            "end_time": end_time,
+            "weekday": weekday,
+            "room": item.get("phong_thi", ""),
+            "status": status,
+            "days_remaining": days_remaining,
+        })
+    return result
 
 
 def get_exam_schedule(session, lanthi: int = 1, hocky: int = 1, namhoc: int = 2025) -> list:

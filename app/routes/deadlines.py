@@ -42,14 +42,12 @@ def deadlines(
                 {"user_id": username, "year": yr, "month": mo},
                 {"_id": 0},
             )
-            db_time_ms = (time.perf_counter() - t0) * 1000.0
             if cached and cached.get("events"):
                 return {
                     "success": True,
                     "count": len(cached["events"]),
                     "data": cached["events"],
                     "cached": True,
-                    "timings_ms": {"db_read": round(db_time_ms, 1)},
                 }
 
         t1 = time.perf_counter()
@@ -80,18 +78,11 @@ def deadlines(
                 pass
             save_time_ms = (time.perf_counter() - t2) * 1000.0
 
-        timings = {"scrape": round(scrape_time_ms, 1)}
-        if db_time_ms is not None:
-            timings["db_read"] = round(db_time_ms, 1)
-        if save_time_ms is not None:
-            timings["db_write"] = round(save_time_ms, 1)
-
         return {
             "success": True,
             "count": len(data),
             "data": data,
             "cached": False,
-            "timings_ms": timings,
         }
 
     except HTTPException:
