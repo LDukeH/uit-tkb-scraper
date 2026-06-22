@@ -9,14 +9,33 @@ from app.services.school_service import (
     save_grade,
     SESSION_STORE,
 )
+from app.schemas.grade import GradeResponse
 
 router = APIRouter(prefix="/grades", tags=["Grades"])
 
 
-@router.get("/")
+@router.get(
+    "/",
+    response_model=GradeResponse,
+    summary="Get student grades",
+    description="Retrieve academic grades for all semesters, optionally filtered by semester and year",
+    response_description="Complete grades data including student profile, semester grades, and academic summary",
+)
 def grades(
-    hocky: Optional[int] = Query(default=None),
-    namhoc: Optional[int] = Query(default=None),
+    hocky: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=3,
+        description="Filter by semester number (1, 2, or 3)",
+        examples=[1, 2],
+    ),
+    namhoc: Optional[int] = Query(
+        default=None,
+        ge=2000,
+        le=2100,
+        description="Filter by academic year",
+        examples=[2024, 2025],
+    ),
     authorization: str = Header(None),
 ):
     if not authorization:

@@ -9,14 +9,33 @@ from app.services.school_service import (
     SESSION_STORE,
 )
 from app.services.school.tuition import transform_tuition_response
+from app.schemas.tuition import TuitionResponse, TuitionSummaryResponse
 
 router = APIRouter(prefix="/tuition", tags=["Tuition"])
 
 
-@router.get("/")
+@router.get(
+    "/",
+    response_model=TuitionResponse,
+    summary="Get tuition information",
+    description="Retrieve detailed tuition fee information for all semesters, optionally filtered by semester and year",
+    response_description="Complete tuition data including student info, bank info, and semester breakdown",
+)
 def tuition(
-    hocky: Optional[int] = Query(default=None),
-    namhoc: Optional[int] = Query(default=None),
+    hocky: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=3,
+        description="Filter by semester number (1, 2, or 3)",
+        examples=[1, 2],
+    ),
+    namhoc: Optional[int] = Query(
+        default=None,
+        ge=2000,
+        le=2100,
+        description="Filter by academic year",
+        examples=[2024, 2025],
+    ),
     authorization: str = Header(None),
 ):
     if not authorization:
@@ -125,7 +144,13 @@ def tuition(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/summary")
+@router.get(
+    "/summary",
+    response_model=TuitionSummaryResponse,
+    summary="Get tuition summary",
+    description="Lightweight endpoint for home screen - returns only remaining balance and latest semester",
+    response_description="Tuition summary with remaining balance and latest semester status",
+)
 def tuition_summary(authorization: str = Header(None)):
     """Lightweight endpoint for Home screen — returns only remaining balance and latest semester."""
     if not authorization:

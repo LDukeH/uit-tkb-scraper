@@ -7,15 +7,38 @@ from fastapi import APIRouter, HTTPException, Header, Query
 from app.services.moodle_service import MoodleClient
 from app.services.school_service import get_valid_session, SESSION_STORE
 from app.core.db import deadlines_collection
+from app.schemas.deadline import DeadlineResponse
 
 router = APIRouter(prefix="/deadlines", tags=["Deadlines"])
 
 
-@router.get("/")
+@router.get(
+    "/",
+    response_model=DeadlineResponse,
+    summary="Get deadlines and events",
+    description="Retrieve deadlines and events from Moodle for a specific month/year",
+    response_description="List of deadlines and events with caching support",
+)
 def deadlines(
-    year: Optional[int] = Query(default=None),
-    month: Optional[int] = Query(default=None),
-    refresh: bool = Query(default=False),
+    year: Optional[int] = Query(
+        default=None,
+        ge=2000,
+        le=2100,
+        description="Year to fetch deadlines for (defaults to current year)",
+        examples=[2024, 2025],
+    ),
+    month: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=12,
+        description="Month to fetch deadlines for (defaults to current month)",
+        examples=[1, 12],
+    ),
+    refresh: bool = Query(
+        default=False,
+        description="Force refresh data from Moodle, bypassing cache",
+        examples=[True, False],
+    ),
     authorization: str = Header(None),
 ):
     if not authorization:

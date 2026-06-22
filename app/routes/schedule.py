@@ -11,11 +11,19 @@ from app.services.school_service import (
 )
 from app.services.school_service import get_exam_schedule
 from app.services.school.schedule import transform_exam_schedule
+from app.schemas.schedule import ScheduleResponse
+from app.schemas.exam import ExamScheduleResponse
 
 router = APIRouter(prefix="/schedule", tags=["Schedule"])
 
 
-@router.get("/")
+@router.get(
+    "/",
+    response_model=ScheduleResponse,
+    summary="Get class schedule",
+    description="Retrieve the weekly class schedule for the authenticated student",
+    response_description="Weekly class schedule with all subjects",
+)
 def schedule(authorization: str = Header(None)):
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing token")
@@ -51,8 +59,19 @@ def schedule(authorization: str = Header(None)):
 
 
 
-@router.get("/exam")
-def exam_schedule(lanthi: int = 1, hocky: int = 1, namhoc: int = 2025, authorization: str = Header(None)):
+@router.get(
+    "/exam",
+    response_model=ExamScheduleResponse,
+    summary="Get exam schedule",
+    description="Retrieve the exam schedule for a specific semester and exam attempt",
+    response_description="Exam schedule with dates, times, and locations",
+)
+def exam_schedule(
+    lanthi: int = 1,
+    hocky: int = 1,
+    namhoc: int = 2025,
+    authorization: str = Header(None),
+):
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing token")
 

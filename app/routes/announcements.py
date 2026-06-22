@@ -1,15 +1,37 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from app.core.db import announcement_collection
+from app.schemas.announcement import AnnouncementListResponse, AnnouncementDetailResponse
 
 router = APIRouter(prefix="/announcements", tags=["Announcements"])
 
 
-@router.get("/")
+@router.get(
+    "/",
+    response_model=AnnouncementListResponse,
+    summary="List announcements",
+    description="Get a paginated list of announcements, optionally filtered by topic",
+    response_description="Paginated list of announcements",
+)
 def get_announcements(
-    topic: Optional[str] = Query(default=None),
-    skip: int = Query(default=0, ge=0),
-    limit: int = Query(default=15, ge=1, le=100),
+    topic: Optional[str] = Query(
+        default=None,
+        description="Filter announcements by topic/category",
+        examples=["Đăng ký học phần", "Thi"],
+    ),
+    skip: int = Query(
+        default=0,
+        ge=0,
+        description="Number of records to skip for pagination",
+        examples=[0, 15, 30],
+    ),
+    limit: int = Query(
+        default=15,
+        ge=1,
+        le=100,
+        description="Maximum number of records to return",
+        examples=[15, 30, 50],
+    ),
 ):
     try:
         query = {}
@@ -34,7 +56,13 @@ def get_announcements(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{node_id}")
+@router.get(
+    "/{node_id}",
+    response_model=AnnouncementDetailResponse,
+    summary="Get announcement details",
+    description="Get full details of a specific announcement by its node ID",
+    response_description="Full announcement details including content and related articles",
+)
 def get_announcement(node_id: str):
     try:
         doc = announcement_collection.find_one(
