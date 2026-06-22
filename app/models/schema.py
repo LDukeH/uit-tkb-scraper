@@ -129,3 +129,49 @@ class TuitionResponse(BaseModel):
     count: int
     data: Optional[TuitionData] = None
     timings_ms: Optional[dict] = None
+
+
+class SubjectGrade(BaseModel):
+    stt: str
+    ma_hp: str
+    ten_hoc_phan: str
+    tin_chi: str
+    diem_qt: str
+    diem_gk: str
+    diem_th: str
+    diem_ck: str
+    diem_hp: str
+    ghi_chu: str
+
+
+class SemesterSummary(BaseModel):
+    tin_chi: str
+    diem_tb: str
+
+
+class GradeSemester(BaseModel):
+    hoc_ky: int
+    nam_hoc: str
+    subjects: List[SubjectGrade]
+    summary: Optional[SemesterSummary] = None
+
+
+class GradesOverview(BaseModel):
+    tong_tin_chi_da_hoc: str
+    tong_tin_chi_tich_luy: str
+    diem_trung_binh_chung: str
+    diem_trung_binh_chung_tich_luy: str
+
+
+class GradesData(BaseModel):
+    student_info: StudentInfo
+    semesters: List[GradeSemester]
+    overview: GradesOverview
+
+
+class GradesResponse(BaseModel):
+    success: bool
+    cached: bool
+    count: int
+    data: Optional[GradesData] = None
+    timings_ms: Optional[dict] = None

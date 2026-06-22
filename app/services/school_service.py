@@ -554,6 +554,7 @@ def get_exam_schedule(session, lanthi: int = 1, hocky: int = 1, namhoc: int = 20
 
 
 TUITION_URL = BASE_URL + "/tracuu/hocphi"
+GRADES_URL = BASE_URL + "/sinhvien/kqhoctap"
 
 
 def get_tuition_fee(session) -> dict:
@@ -832,6 +833,207 @@ def load_all_cached_tuition(user_id: str):
     except Exception as e:
         print(f"Error loading all cached tuition: {e}")
         return None
+
+
+def get_grades(session) -> dict:
+    """Scrape grades (kqhoctap) page using an authenticated session.
+
+    Returns dict with keys: `student_info`, `semesters`, `overview`.
+    """
+    try:
+        res = session.get(GRADES_URL, timeout=10)
+        if res.status_code != 200:
+            return {"student_info": {}, "semesters": [], "overview": {}}
+
+        soup = BeautifulSoup(res.text, "html.parser")
+
+        # --- Student info table (first table in the form) ---
+        form = soup.find("form", {"id": "uit-sinhvien-tracuu-kqhoctap"})
+        if not form:
+            return {"student_info": {}, "semesters": [], "overview": {}}
+
+        tables = form.find_all("table", recursive=True)
+        if len(tables) < 2:
+            return {"student_info": {}, "semesters": [], "overview": {}}
+
+        student_table = tables[0]
+        student_info = {}
+        for row in student_table.find_all("tr"):
+            cells = row.find_all("td")
+            labels_text = [c.get_text(strip=True) for c in cells]
+
+            for i, label in enumerate(labels_text):
+                next_i = i + 1
+                if "Họ và tên" in label and next_i < len(cells):
+                    student_info["ho_ten"] = cells[next_i].get_text(strip=True)
+                elif "Ngày sinh" in label and next_i < len(cells):
+                    student_info["ngay_sinh"] = cells[next_i].get_text(strip=True)
+                elif "Giới tính" in label and next_i < len(cells):
+                    student_info["gioi_tinh"] = cells[next_i].get_text(strip=True)
+                elif "Mã SV" in label and next_i < len(cells):
+                    student_info["mssv"] = cells[next_i].get_text(strip=True)
+                elif "Lớp sinh hoạt" in label and next_i < len(cells):
+                    student_info["lop_sinh_hoat"] = cells[next_i].get_text(strip=True)
+                elif "Khoa" in label and next_i < len(cells):
+                    student_info["khoa"] = cells[next_i].get_text(strip=True)
+                elif "Bậc đào tạo" in label and next_i < len(cells):
+                    student_info["bac_dao_tao"] = cells[next_i].get_text(strip=True)
+                elif "Hệ đào tạo" in label and next_i < len(cells):
+                    student_info["he_dao_tao"] = cells[next_i].get_text(strip=True)
+                elif "Ngành" in label and next_i < len(cells):
+                    student_info["nganh"] = cells[next_i].get_text(strip=True)
+
+        # --- Grades table (second table) ---
+        grade_table = tables[1]
+        rows = grade_table.find_all("tr")
+
+        semesters = []
+        overview = {
+            "tong_tin_chi_da_hoc": "",
+            "tong_tin_chi_tich_luy": "",
+            "diem_trung_binh_chung": "",
+            "diem_trung_binh_chung_tich_luy": "",
+        }
+
+        current_semester = None
+
+        for row in rows:
+            cells = row.find_all("td")
+            if not cells:
+                continue
+
+            # Check if it's a semester header row (colspan=10 with strong text)
+            first_cell = cells[0]
+            colspan = first_cell.get("colspan")
+            if colspan == "10":
+                strong = first_cell.find("strong")
+                if strong:
+                    text = strong.get_text(strip=True)
+                    # Parse "Học kỳ X - Năm học YYYY-ZZZZ"
+                    match = re.match(r"Học kỳ\s*(\d+)\s*-\s*Năm học\s*(\d{4}-\d{4})", text)
+                    if match:
+                        if current_semester:
+                            semesters.append(current_semester)
+                        current_semester = {
+                            "hoc_ky": int(match.group(1)),
+                            "nam_hoc": match.group(2),
+                            "subjects": [],
+                            "summary": None,
+                        }
+                continue
+
+            # Check for footer/overview rows (must come before semester summary)
+            first_text = first_cell.get_text(strip=True)
+            if colspan == "3" or colspan == "10":
+                if "Số tín chỉ đã học" in first_text:
+                    overview["tong_tin_chi_da_hoc"] = cells[1].get_text(strip=True) if len(cells) > 1 else ""
+                    continue
+                if "Số tín chỉ tích lũy" in first_text:
+                    overview["tong_tin_chi_tich_luy"] = cells[1].get_text(strip=True) if len(cells) > 1 else ""
+                    continue
+                if "Điểm trung bình chung" in first_text and "tích lũy" not in first_text:
+                    overview["diem_trung_binh_chung"] = cells[6].get_text(strip=True) if len(cells) > 6 else ""
+                    continue
+                if "Điểm trung bình chung tích lũy" in first_text:
+                    overview["diem_trung_binh_chung_tich_luy"] = cells[6].get_text(strip=True) if len(cells) > 6 else ""
+                    continue
+
+            # Check for semester summary row (has 10 cells, third cell contains "Trung bình học kỳ")
+            if len(cells) >= 8 and any("Trung bình học kỳ" in c.get_text(strip=True) for c in cells):
+                if current_semester:
+                    tin_chi_cell = cells[3] if len(cells) > 3 else None
+                    diem_tb_cell = cells[8] if len(cells) > 8 else None
+                    current_semester["summary"] = {
+                        "tin_chi": tin_chi_cell.get_text(strip=True) if tin_chi_cell else "",
+                        "diem_tb": diem_tb_cell.get_text(strip=True) if diem_tb_cell else "",
+                    }
+                continue
+
+            # Otherwise it's a subject data row
+            if current_semester is None:
+                continue
+
+            stt_text = first_cell.get_text(strip=True)
+            if not stt_text or stt_text == "&nbsp;" or stt_text == "":
+                continue
+            # Check if first cell content is numeric (subject row)
+            if not stt_text.isdigit():
+                continue
+
+            def cell_text(i, default=""):
+                return cells[i].get_text(strip=True) if i < len(cells) else default
+
+            subject = {
+                "stt": stt_text,
+                "ma_hp": cell_text(1),
+                "ten_hoc_phan": cell_text(2),
+                "tin_chi": cell_text(3),
+                "diem_qt": cell_text(4),
+                "diem_gk": cell_text(5),
+                "diem_th": cell_text(6),
+                "diem_ck": cell_text(7),
+                "diem_hp": cell_text(8),
+                "ghi_chu": cell_text(9),
+            }
+            current_semester["subjects"].append(subject)
+
+        if current_semester:
+            semesters.append(current_semester)
+
+        return {
+            "student_info": student_info,
+            "semesters": semesters,
+            "overview": overview,
+        }
+
+    except Exception as e:
+        print(f"Error fetching grades: {e}")
+        return {"student_info": {}, "semesters": [], "overview": {}}
+
+
+def load_cached_grades(user_id: str):
+    """Return cached grades document for given user_id."""
+    try:
+        from app.core.db import grades_collection
+        doc = grades_collection.find_one({"user_id": user_id}, {"_id": 0})
+        return doc
+    except Exception as e:
+        print(f"Error loading cached grades: {e}")
+        return None
+
+
+def save_grades(user_id: str, grades_data: dict, ttl_days: int = None):
+    """Upsert grades for user with an expiry."""
+    try:
+        from app.core.db import grades_collection
+
+        if ttl_days is None:
+            try:
+                ttl_days = int(os.getenv("GRADES_CACHE_TTL_DAYS", os.getenv("SCHEDULE_CACHE_TTL_DAYS", "7")))
+            except Exception:
+                ttl_days = 7
+
+        expires = datetime.utcnow() + timedelta(days=ttl_days)
+
+        doc = {
+            "user_id": user_id,
+            "student_info": grades_data.get("student_info", {}),
+            "semesters": grades_data.get("semesters", []),
+            "overview": grades_data.get("overview", {}),
+            "updated_at": datetime.utcnow(),
+            "expires_at": expires,
+            "source": "student.uit.edu.vn",
+        }
+
+        grades_collection.update_one(
+            {"user_id": user_id},
+            {"$set": doc},
+            upsert=True,
+        )
+        return True
+    except Exception as e:
+        print(f"Error saving grades: {e}")
+        return False
 
 
 if __name__ == "__main__":

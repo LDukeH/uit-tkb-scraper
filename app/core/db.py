@@ -15,6 +15,7 @@ announcement_collection = db["announcements"]
 schedule_collection = db["schedules"]
 exam_collection = db["exam_schedules"]
 tuition_collection = db["tuition_fees"]
+grades_collection = db["grades"]
 
 try:
 	# luu cache lich theo user thong tin ky thi luu rieng
@@ -51,6 +52,16 @@ except Exception:
 	pass
 
 deadlines_collection = db["deadlines"]
+
+try:
+	grades_collection.create_index(
+		[("user_id", 1)],
+		unique=True,
+		name="unique_user_grades"
+	)
+	grades_collection.create_index("expires_at", expireAfterSeconds=0, name="ttl_expires_at_grades")
+except Exception:
+	pass
 
 try:
 	deadlines_collection.create_index(
