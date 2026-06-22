@@ -1,4 +1,4 @@
-from app.core.db import announcement_collection
+from app.core.db import get_announcement_collection
 from datetime import datetime
 
 
@@ -17,7 +17,7 @@ def insert_announcements(data_list):
             "details": item.get("details")
         }
 
-        announcement_collection.update_one(
+        get_announcement_collection().update_one(
             {"_id": doc["_id"]},
             {"$set": doc},
             upsert=True

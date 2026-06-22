@@ -11,3 +11,5 @@ python-jose
 scikit-learn
 certifi
 icalendar
+psutil
+httpx

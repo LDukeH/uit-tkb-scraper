@@ -1,25 +1,11 @@
-"""
-School service — backward-compatible re-exports.
-
-Previously a monolithic module, now split into a package under app/services/school/.
-All public symbols are re-exported here so existing imports continue to work.
-
-To import directly from the sub-modules:
-    from app.services.school.session import login_and_get_session
-    from app.services.school.schedule import get_schedule, get_exam_schedule
-    from app.services.school.announcement import get_all_announcements_full
-    from app.services.school.tuition import get_tuition_fee
-    from app.services.school.grades import get_grades
-"""
-
-from app.services.school.session import (  # noqa: F401
+from app.services.school.session import (
     save_session,
     is_session_alive,
     get_valid_session,
     login_and_get_session,
     SESSION_STORE,
 )
-from app.services.school.schedule import (  # noqa: F401
+from app.services.school.schedule import (
     get_schedule,
     merge_schedule,
     load_cached_schedule,
@@ -28,7 +14,7 @@ from app.services.school.schedule import (  # noqa: F401
     save_exam_schedule,
     get_exam_schedule,
 )
-from app.services.school.announcement import (  # noqa: F401
+from app.services.school.announcement import (
     get_latest_announcement_node_id,
     get_all_announcements,
     parse_article,
@@ -37,19 +23,21 @@ from app.services.school.announcement import (  # noqa: F401
     fetch_article_content,
     get_all_announcements_full,
 )
-from app.services.school.tuition import (  # noqa: F401
+from app.services.school.tuition import (
     get_tuition_fee,
     load_cached_tuition,
     save_tuition,
+    save_tuition_bulk,
     load_all_cached_tuition,
 )
-from app.services.school.grades import (  # noqa: F401
+from app.services.school.grades import (
     get_grades,
     load_cached_grade,
     save_grade,
+    save_grades_bulk,
     load_all_cached_grades,
 )
-from app.services.school.constants import (  # noqa: F401
+from app.services.school.constants import (  
     LOGIN_URL,
     SCHEDULE_URL,
     SESSION_DURATION,

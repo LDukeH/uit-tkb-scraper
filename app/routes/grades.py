@@ -1,12 +1,14 @@
-from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi import APIRouter, HTTPException, Header, Query, Request
 from typing import Optional
 import time
 
+from app.core.cache_stampede import stampede
 from app.services.school_service import (
     get_grades,
     get_valid_session,
     load_all_cached_grades,
     save_grade,
+    save_grades_bulk,
     SESSION_STORE,
 )
 from app.schemas.grade import GradeResponse
@@ -37,7 +39,11 @@ def grades(
         examples=[2024, 2025],
     ),
     authorization: str = Header(None),
+    request: Request = None,
 ):
+    t_request = time.perf_counter()
+    timings = {}
+
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing token")
 
@@ -50,26 +56,24 @@ def grades(
     try:
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")
 
-        # tìm cache
-        db_time_ms = None
+        # DB Cache read
         if username:
             t0 = time.perf_counter()
             cached = load_all_cached_grades(username)
-            db_time_ms = (time.perf_counter() - t0) * 1000.0
+            timings["db_read_ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
 
             if cached and cached.get("semesters"):
                 semesters = cached["semesters"]
 
-                # lọc theo năm và học kỳ nếu có
                 if hocky is not None and namhoc is not None:
-                    semesters = [
-                        s for s in semesters
-                        if s["hocky"] == hocky and s["namhoc"] == namhoc
-                    ]
+                    semesters = [s for s in semesters if s["hocky"] == hocky and s["namhoc"] == namhoc]
                 elif hocky is not None:
                     semesters = [s for s in semesters if s["hocky"] == hocky]
                 elif namhoc is not None:
                     semesters = [s for s in semesters if s["namhoc"] == namhoc]
+
+                total_ms = round((time.perf_counter() - t_request) * 1000.0, 1)
+                timings["total_ms"] = total_ms
 
                 return {
                     "success": True,
@@ -80,57 +84,39 @@ def grades(
                         "semesters": semesters,
                         "summary": cached.get("summary", {}),
                     },
-                    "timings_ms": {"db_read": round(db_time_ms, 1)},
+                    "timings_ms": timings,
                 }
 
-        # không có cache -> scrape
-        t1 = time.perf_counter()
-        raw = get_grades(session)
-        scrape_time_ms = (time.perf_counter() - t1) * 1000.0
+        # No cache — scrape (with stampede protection)
+        with stampede(f"grades:{username}", timeout=10.0):
+            t1 = time.perf_counter()
+            raw = get_grades(session)
+            timings["scrape_ms"] = round((time.perf_counter() - t1) * 1000.0, 1)
 
-        student_profile = raw.get("student_profile") or {}
-        all_semesters = raw.get("semesters") or []
-        summary = raw.get("summary") or {}
+            student_profile = raw.get("student_profile") or {}
+            all_semesters = raw.get("semesters") or []
+            summary = raw.get("summary") or {}
 
-        # lưu cache vào db
-        save_time_ms = None
-        if username and all_semesters:
-            t2 = time.perf_counter()
-            for sem in all_semesters:
+            # Bulk save to cache
+            if username and all_semesters:
+                t2 = time.perf_counter()
                 try:
-                    save_grade(
-                        username,
-                        sem["hocky"],
-                        sem["namhoc"],
-                        student_profile,
-                        {
-                            "subjects": sem.get("subjects", []),
-                            "so_tin_chi": sem.get("so_tin_chi"),
-                            "diem_trung_binh": sem.get("diem_trung_binh", ""),
-                        },
-                        summary,
-                    )
+                    save_grades_bulk(username, student_profile, summary, all_semesters)
                 except Exception:
                     pass
-            save_time_ms = (time.perf_counter() - t2) * 1000.0
+                timings["db_write_ms"] = round((time.perf_counter() - t2) * 1000.0, 1)
 
-        # lọc theo năm và học kỳ nếu có
+        # Filter
         semesters = all_semesters
         if hocky is not None and namhoc is not None:
-            semesters = [
-                s for s in semesters
-                if s["hocky"] == hocky and s["namhoc"] == namhoc
-            ]
+            semesters = [s for s in semesters if s["hocky"] == hocky and s["namhoc"] == namhoc]
         elif hocky is not None:
             semesters = [s for s in semesters if s["hocky"] == hocky]
         elif namhoc is not None:
             semesters = [s for s in semesters if s["namhoc"] == namhoc]
 
-        timings = {"scrape": round(scrape_time_ms, 1)}
-        if db_time_ms is not None:
-            timings["db_read"] = round(db_time_ms, 1)
-        if save_time_ms is not None:
-            timings["db_write"] = round(save_time_ms, 1)
+        total_ms = round((time.perf_counter() - t_request) * 1000.0, 1)
+        timings["total_ms"] = total_ms
 
         return {
             "success": True,

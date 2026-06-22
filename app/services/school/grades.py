@@ -267,8 +267,8 @@ def get_grades(session) -> dict:
 def load_cached_grade(user_id: str, hocky: int, namhoc: int):
     """Return cached grade document for a user and term."""
     try:
-        from app.core.db import grade_collection
-        return grade_collection.find_one(
+        from app.core.db import get_grade_collection
+        return get_grade_collection().find_one(
             {"user_id": user_id, "hocky": hocky, "namhoc": namhoc},
             {"_id": 0}
         )
@@ -286,7 +286,7 @@ def save_grade(user_id: str, hocky: int, namhoc: int,
     Học kỳ đang xử lý (diem_trung_binh == 0 hoặc rỗng) → TTL 1 ngày.
     """
     try:
-        from app.core.db import grade_collection
+        from app.core.db import get_grade_collection
 
         if ttl_days is None:
             # TTL thông minh: nếu điểm cuối kỳ tồn tại và != 0, cache lâu
@@ -315,7 +315,7 @@ def save_grade(user_id: str, hocky: int, namhoc: int,
             "source": "student.uit.edu.vn",
         }
 
-        grade_collection.update_one(
+        get_grade_collection().update_one(
             {"user_id": user_id, "hocky": hocky, "namhoc": namhoc},
             {"$set": doc},
             upsert=True,
@@ -326,11 +326,63 @@ def save_grade(user_id: str, hocky: int, namhoc: int,
         return False
 
 
+def save_grades_bulk(user_id: str, student_profile: dict, summary: dict,
+                     semesters: list[dict], ttl_days: int = None) -> bool:
+    """Bulk upsert all grade semesters for a user in a single DB round-trip."""
+    try:
+        from pymongo import UpdateOne
+        from app.core.db import get_grade_collection
+
+        operations = []
+        for sem in semesters:
+            # TTL thông minh per semester
+            if ttl_days is None:
+                diem_tb = sem.get("diem_trung_binh")
+                try:
+                    if diem_tb is not None and diem_tb != "" and float(diem_tb) != 0:
+                        sem_ttl = 365
+                    else:
+                        sem_ttl = 1
+                except (ValueError, TypeError):
+                    sem_ttl = 1
+            else:
+                sem_ttl = ttl_days
+
+            expires = datetime.utcnow() + timedelta(days=sem_ttl)
+
+            doc = {
+                "user_id": user_id,
+                "hocky": sem["hocky"],
+                "namhoc": sem["namhoc"],
+                "student_profile": student_profile,
+                "subjects": sem.get("subjects", []),
+                "so_tin_chi": sem.get("so_tin_chi"),
+                "diem_trung_binh": sem.get("diem_trung_binh", ""),
+                "summary": summary,
+                "updated_at": datetime.utcnow(),
+                "expires_at": expires,
+                "source": "student.uit.edu.vn",
+            }
+
+            operations.append(UpdateOne(
+                {"user_id": user_id, "hocky": sem["hocky"], "namhoc": sem["namhoc"]},
+                {"$set": doc},
+                upsert=True,
+            ))
+
+        if operations:
+            get_grade_collection().bulk_write(operations)
+        return True
+    except Exception as e:
+        print(f"Error saving grades bulk: {e}")
+        return False
+
+
 def load_all_cached_grades(user_id: str):
     """Return all cached grade semesters for a user."""
     try:
-        from app.core.db import grade_collection
-        docs = list(grade_collection.find(
+        from app.core.db import get_grade_collection
+        docs = list(get_grade_collection().find(
             {"user_id": user_id},
             {"_id": 0}
         ).sort([("namhoc", -1), ("hocky", -1)]))

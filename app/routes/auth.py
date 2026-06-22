@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, Header
+import time
 import uuid
+from fastapi import APIRouter, HTTPException, Header, Request
 
 from app.services.school_service import (
     login_and_get_session,
     save_session,
-    SESSION_STORE
+    SESSION_STORE,
 )
 from app.schemas.auth import LoginRequest, LoginResponse, LogoutResponse
 
@@ -18,8 +19,13 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
     description="Authenticate with UIT credentials and receive a session token",
     response_description="Login successful with session token",
 )
-def login(data: LoginRequest):
+def login(data: LoginRequest, request: Request = None):
+    tc = getattr(request.state, "timing", None) if request else None
+
+    # Measure UIT login
+    t0 = time.perf_counter()
     session = login_and_get_session(data.username, data.password)
+    login_ms = (time.perf_counter() - t0) * 1000.0
 
     if not session:
         raise HTTPException(status_code=401, detail="Đăng nhập UIT thất bại.")
@@ -27,9 +33,12 @@ def login(data: LoginRequest):
     token = str(uuid.uuid4())
     save_session(token, session, data.username, data.password)
 
+    timings = {"uit_login_ms": round(login_ms, 1)}
+
     return {
         "success": True,
-        "token": token
+        "token": token,
+        "timings_ms": timings,
     }
 
 

@@ -290,8 +290,8 @@ def transform_tuition_response(raw: dict, username: str = "") -> dict:
 def load_cached_tuition(user_id: str, hocky: int, namhoc: int):
     """Return cached tuition document for a user and term."""
     try:
-        from app.core.db import tuition_collection
-        return tuition_collection.find_one(
+        from app.core.db import get_tuition_collection
+        return get_tuition_collection().find_one(
             {"user_id": user_id, "hocky": hocky, "namhoc": namhoc},
             {"_id": 0}
         )
@@ -305,7 +305,7 @@ def save_tuition(user_id: str, hocky: int, namhoc: int,
                  ttl_days: int = None):
     """Upsert tuition data for a user/term with expiry."""
     try:
-        from app.core.db import tuition_collection
+        from app.core.db import get_tuition_collection
 
         if ttl_days is None:
             try:
@@ -328,7 +328,7 @@ def save_tuition(user_id: str, hocky: int, namhoc: int,
             "source": "student.uit.edu.vn",
         }
 
-        tuition_collection.update_one(
+        get_tuition_collection().update_one(
             {"user_id": user_id, "hocky": hocky, "namhoc": namhoc},
             {"$set": doc},
             upsert=True,
@@ -339,11 +339,61 @@ def save_tuition(user_id: str, hocky: int, namhoc: int,
         return False
 
 
+def save_tuition_bulk(user_id: str, student_info: dict, bank_info: dict,
+                      semesters: list[dict], ttl_days: int = None) -> bool:
+    """Bulk upsert all tuition semesters for a user in a single DB round-trip."""
+    try:
+        from pymongo import UpdateOne
+        from app.core.db import get_tuition_collection
+
+        if ttl_days is None:
+            try:
+                ttl_days = int(os.getenv("TUITION_CACHE_TTL_DAYS",
+                             os.getenv("SCHEDULE_CACHE_TTL_DAYS", "7")))
+            except Exception:
+                ttl_days = 7
+
+        expires = datetime.utcnow() + timedelta(days=ttl_days)
+        operations = []
+
+        for sem in semesters:
+            doc = {
+                "user_id": user_id,
+                "hocky": sem["hocky"],
+                "namhoc": sem["namhoc"],
+                "student_info": student_info,
+                "bank_info": bank_info,
+                "updated_at": datetime.utcnow(),
+                "expires_at": expires,
+                "source": "student.uit.edu.vn",
+            }
+            # Copy all semester fields
+            for key in ["so_tc_dang_ky", "mon_dang_ky", "hoc_phi", "phi_khac",
+                        "so_tien_phai_dong", "no_hoc_ky_truoc", "so_tien_da_dong",
+                        "con_no", "ngan_hang", "thoi_gian_dong", "ghi_chu",
+                        "chi_tiet_mon"]:
+                if key in sem:
+                    doc[key] = sem[key]
+
+            operations.append(UpdateOne(
+                {"user_id": user_id, "hocky": sem["hocky"], "namhoc": sem["namhoc"]},
+                {"$set": doc},
+                upsert=True,
+            ))
+
+        if operations:
+            get_tuition_collection().bulk_write(operations)
+        return True
+    except Exception as e:
+        print(f"Error saving tuition bulk: {e}")
+        return False
+
+
 def load_all_cached_tuition(user_id: str):
     """Return all cached tuition semesters for a user, as structured data."""
     try:
-        from app.core.db import tuition_collection
-        docs = list(tuition_collection.find(
+        from app.core.db import get_tuition_collection
+        docs = list(get_tuition_collection().find(
             {"user_id": user_id},
             {"_id": 0}
         ).sort([("namhoc", -1), ("hocky", -1)]))

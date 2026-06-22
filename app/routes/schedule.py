@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Header
+import time
+from fastapi import APIRouter, HTTPException, Header, Request
 
 from app.services.school_service import (
     get_schedule,
@@ -24,7 +25,10 @@ router = APIRouter(prefix="/schedule", tags=["Schedule"])
     description="Retrieve the weekly class schedule for the authenticated student",
     response_description="Weekly class schedule with all subjects",
 )
-def schedule(authorization: str = Header(None)):
+def schedule(authorization: str = Header(None), request: Request = None):
+    t_request = time.perf_counter()
+    timings = {}
+
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing token")
 
@@ -35,28 +39,38 @@ def schedule(authorization: str = Header(None)):
         raise HTTPException(status_code=401, detail="Session expired")
 
     try:
-        # tìm và lấy cache theo username
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")
 
-        # tính toán thời gian đọc db
+        # DB Cache read
         if username:
+            t0 = time.perf_counter()
             cached = load_cached_schedule(username)
+            timings["db_read_ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
+
             if cached and cached.get("schedule"):
-                return {"success": True, "count": len(cached.get("schedule")), "data": cached.get("schedule"), "cached": True}
+                total_ms = round((time.perf_counter() - t_request) * 1000.0, 1)
+                timings["total_ms"] = total_ms
+                return {"success": True, "count": len(cached.get("schedule")), "data": cached.get("schedule"), "cached": True, "timings_ms": timings}
 
-        # không có cache -> scrape và lưu
+        # Scrape from UIT
+        t1 = time.perf_counter()
         data = get_schedule(session)
+        timings["scrape_ms"] = round((time.perf_counter() - t1) * 1000.0, 1)
 
+        # DB write
         if username:
+            t2 = time.perf_counter()
             try:
                 save_schedule(username, data)
             except Exception:
                 pass
+            timings["db_write_ms"] = round((time.perf_counter() - t2) * 1000.0, 1)
 
-        return {"success": True, "count": len(data), "data": data, "cached": False}
+        total_ms = round((time.perf_counter() - t_request) * 1000.0, 1)
+        timings["total_ms"] = total_ms
+        return {"success": True, "count": len(data), "data": data, "cached": False, "timings_ms": timings}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 @router.get(
@@ -71,7 +85,11 @@ def exam_schedule(
     hocky: int = 1,
     namhoc: int = 2025,
     authorization: str = Header(None),
+    request: Request = None,
 ):
+    t_request = time.perf_counter()
+    timings = {}
+
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing token")
 
@@ -84,25 +102,44 @@ def exam_schedule(
     try:
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")
 
+        # DB Cache read
         if username:
+            t0 = time.perf_counter()
             cached = load_cached_exam_schedule(username, lanthi, hocky, namhoc)
+            timings["db_read_ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
+
             if cached and cached.get("exam_schedule"):
+                total_ms = round((time.perf_counter() - t_request) * 1000.0, 1)
+                timings["total_ms"] = total_ms
                 return {
                     "success": True,
                     "count": len(cached.get("exam_schedule")),
                     "data": cached.get("exam_schedule"),
                     "cached": True,
+                    "timings_ms": timings,
                 }
 
+        # Scrape from UIT
+        t1 = time.perf_counter()
         data = get_exam_schedule(session, lanthi=lanthi, hocky=hocky, namhoc=namhoc)
-        transformed = transform_exam_schedule(data)
+        timings["scrape_ms"] = round((time.perf_counter() - t1) * 1000.0, 1)
 
+        # Transform
+        t2 = time.perf_counter()
+        transformed = transform_exam_schedule(data)
+        timings["transform_ms"] = round((time.perf_counter() - t2) * 1000.0, 1)
+
+        # DB write
         if username:
+            t3 = time.perf_counter()
             try:
                 save_exam_schedule(username, lanthi, hocky, namhoc, transformed)
             except Exception:
                 pass
+            timings["db_write_ms"] = round((time.perf_counter() - t3) * 1000.0, 1)
 
-        return {"success": True, "count": len(transformed), "data": transformed, "cached": False}
+        total_ms = round((time.perf_counter() - t_request) * 1000.0, 1)
+        timings["total_ms"] = total_ms
+        return {"success": True, "count": len(transformed), "data": transformed, "cached": False, "timings_ms": timings}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

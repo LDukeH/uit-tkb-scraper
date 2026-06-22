@@ -1,5 +1,9 @@
+import threading
+from typing import Optional
 import certifi
 from pymongo import MongoClient
+from pymongo.collection import Collection
+from pymongo.errors import OperationFailure
 import os
 from dotenv import load_dotenv
 
@@ -7,69 +11,109 @@ load_dotenv()
 
 MONGO_URL = os.getenv("MONGO_URL")
 
-client = MongoClient(host=MONGO_URL, tlsCAFile=certifi.where())
+_client: Optional[MongoClient] = None
+_lock = threading.Lock()
+_indexes_created = False
+_indexes_lock = threading.Lock()
 
-db = client["uit-service"]
-announcement_collection = db["announcements"]
 
-schedule_collection = db["schedules"]
-exam_collection = db["exam_schedules"]
-tuition_collection = db["tuition_fees"]
+def get_client() -> MongoClient:
+    global _client
+    if _client is None:
+        with _lock:
+            if _client is None:
+                _client = MongoClient(
+                    host=MONGO_URL,
+                    tlsCAFile=certifi.where(),
+                    connectTimeoutMS=3000,
+                    serverSelectionTimeoutMS=5000,
+                    maxPoolSize=10,
+                    minPoolSize=0,
+                )
+    return _client
 
-try:
-	# luu cache lich theo user thong tin ky thi luu rieng
-	schedule_collection.create_index(
-		[("user_id", 1)],
-		unique=True,
-		name="unique_user"
-	)
-	# tao index ttl tren expires_at de xoa cache het han
-	schedule_collection.create_index("expires_at", expireAfterSeconds=0, name="ttl_expires_at")
-except Exception:
-	pass
 
-try:
-	# luu lich thi theo user va ky
-	exam_collection.create_index(
-		[("user_id", 1), ("lanthi", 1), ("hocky", 1), ("namhoc", 1)],
-		unique=True,
-		name="unique_user_exam_term"
-	)
-	exam_collection.create_index("expires_at", expireAfterSeconds=0, name="ttl_expires_at_exam")
-except Exception:
-	pass
+def close_client() -> None:
+    global _client
+    if _client is not None:
+        _client.close()
+        _client = None
 
-try:
-	# luu hoc phi theo user va ky
-	tuition_collection.create_index(
-		[("user_id", 1), ("hocky", 1), ("namhoc", 1)],
-		unique=True,
-		name="unique_user_tuition_term"
-	)
-	tuition_collection.create_index("expires_at", expireAfterSeconds=0, name="ttl_expires_at_tuition")
-except Exception:
-	pass
 
-deadlines_collection = db["deadlines"]
+def _ensure_indexes() -> None:
+    global _indexes_created
+    if _indexes_created:
+        return
+    with _indexes_lock:
+        if _indexes_created:
+            return
 
-try:
-	deadlines_collection.create_index(
-		[("user_id", 1), ("year", 1), ("month", 1)],
-		unique=True,
-		name="unique_user_month"
-	)
-	deadlines_collection.create_index("expires_at", expireAfterSeconds=0, name="ttl_expires_at_deadlines")
-except Exception:
-	pass
+        client = get_client()
+        db = client["uit-service"]
 
-grade_collection = db["grades"]
+        _try_index(db["schedules"], [
+            ([("user_id", 1)], {"unique": True, "name": "unique_user"}),
+            ([("expires_at", 1)], {"expireAfterSeconds": 0, "name": "ttl_expires_at"}),
+        ])
+        _try_index(db["exam_schedules"], [
+            ([("user_id", 1), ("lanthi", 1), ("hocky", 1), ("namhoc", 1)],
+             {"unique": True, "name": "unique_user_exam_term"}),
+            ([("expires_at", 1)], {"expireAfterSeconds": 0, "name": "ttl_expires_at_exam"}),
+        ])
+        _try_index(db["tuition_fees"], [
+            ([("user_id", 1), ("hocky", 1), ("namhoc", 1)],
+             {"unique": True, "name": "unique_user_tuition_term"}),
+            ([("expires_at", 1)], {"expireAfterSeconds": 0, "name": "ttl_expires_at_tuition"}),
+        ])
+        _try_index(db["deadlines"], [
+            ([("user_id", 1), ("year", 1), ("month", 1)],
+             {"unique": True, "name": "unique_user_month"}),
+            ([("expires_at", 1)], {"expireAfterSeconds": 0, "name": "ttl_expires_at_deadlines"}),
+        ])
+        _try_index(db["grades"], [
+            ([("user_id", 1), ("hocky", 1), ("namhoc", 1)],
+             {"unique": True, "name": "unique_user_grade_term"}),
+            ([("expires_at", 1)], {"expireAfterSeconds": 0, "name": "ttl_expires_at_grade"}),
+        ])
 
-try:
-	grade_collection.create_index(
-		[("user_id", 1), ("hocky", 1), ("namhoc", 1)],
-		unique=True,
-		name="unique_user_grade_term"
-	)
-	grade_collection.create_index("expires_at", expireAfterSeconds=0, name="ttl_expires_at_grade")
-except Exception:
-	pass
+        _indexes_created = True
+
+
+def _try_index(collection: Collection, specs: list) -> None:
+    for keys, kwargs in specs:
+        try:
+            collection.create_index(keys, **kwargs)
+        except OperationFailure:
+            pass
+        except Exception:
+            pass
+
+
+def get_announcement_collection() -> Collection:
+    _ensure_indexes()
+    return get_client()["uit-service"]["announcements"]
+
+
+def get_schedule_collection() -> Collection:
+    _ensure_indexes()
+    return get_client()["uit-service"]["schedules"]
+
+
+def get_exam_collection() -> Collection:
+    _ensure_indexes()
+    return get_client()["uit-service"]["exam_schedules"]
+
+
+def get_tuition_collection() -> Collection:
+    _ensure_indexes()
+    return get_client()["uit-service"]["tuition_fees"]
+
+
+def get_deadlines_collection() -> Collection:
+    _ensure_indexes()
+    return get_client()["uit-service"]["deadlines"]
+
+
+def get_grade_collection() -> Collection:
+    _ensure_indexes()
+    return get_client()["uit-service"]["grades"]

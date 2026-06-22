@@ -1,8 +1,28 @@
 import time
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
-
 from app.services.school.constants import LOGIN_URL, SESSION_DURATION
+
+_shared_session: requests.Session | None = None
+
+
+def get_shared_session() -> requests.Session:
+    global _shared_session
+    if _shared_session is None:
+        _shared_session = requests.Session()
+        _shared_session.headers.update({"User-Agent": "Mozilla/5.0"})
+        retry_strategy = Retry(
+            total=2,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=10, pool_maxsize=20)
+        _shared_session.mount("https://", adapter)
+        _shared_session.mount("http://", adapter)
+    return _shared_session
+
 
 SESSION_STORE = {}
 
@@ -46,7 +66,6 @@ def get_valid_session(token):
             del SESSION_STORE[token]
             return None
 
-    # chi refresh expires neu session con song
     data["expires"] = time.time() + SESSION_DURATION
     return current_session
 

@@ -2,11 +2,11 @@ import time
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi import APIRouter, HTTPException, Header, Query, Request
 
 from app.services.moodle_service import MoodleClient
 from app.services.school_service import get_valid_session, SESSION_STORE
-from app.core.db import deadlines_collection
+from app.core.db import get_deadlines_collection
 from app.schemas.deadline import DeadlineResponse
 
 router = APIRouter(prefix="/deadlines", tags=["Deadlines"])
@@ -40,7 +40,11 @@ def deadlines(
         examples=[True, False],
     ),
     authorization: str = Header(None),
+    request: Request = None,
 ):
+    t_request = time.perf_counter()
+    timings = {}
+
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing token")
 
@@ -58,33 +62,38 @@ def deadlines(
         yr = year or now.year
         mo = month or now.month
 
-        db_time_ms = None
         if username and not refresh:
             t0 = time.perf_counter()
-            cached = deadlines_collection.find_one(
+            cached = get_deadlines_collection().find_one(
                 {"user_id": username, "year": yr, "month": mo},
                 {"_id": 0},
             )
+            timings["db_read_ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
+
             if cached and cached.get("events"):
+                total_ms = round((time.perf_counter() - t_request) * 1000.0, 1)
+                timings["total_ms"] = total_ms
                 return {
                     "success": True,
                     "count": len(cached["events"]),
                     "data": cached["events"],
                     "cached": True,
+                    "timings_ms": timings,
                 }
 
+        # Moodle login + scrape
         t1 = time.perf_counter()
         client = MoodleClient(username, password)
         if not client.login():
             raise HTTPException(status_code=401, detail="Moodle login failed")
         data = client.get_deadlines(yr, mo)
-        scrape_time_ms = (time.perf_counter() - t1) * 1000.0
+        timings["moodle_scrape_ms"] = round((time.perf_counter() - t1) * 1000.0, 1)
 
-        save_time_ms = None
+        # DB write
         if username:
             t2 = time.perf_counter()
             try:
-                deadlines_collection.update_one(
+                get_deadlines_collection().update_one(
                     {"user_id": username, "year": yr, "month": mo},
                     {"$set": {
                         "user_id": username,
@@ -99,13 +108,17 @@ def deadlines(
                 )
             except Exception:
                 pass
-            save_time_ms = (time.perf_counter() - t2) * 1000.0
+            timings["db_write_ms"] = round((time.perf_counter() - t2) * 1000.0, 1)
+
+        total_ms = round((time.perf_counter() - t_request) * 1000.0, 1)
+        timings["total_ms"] = total_ms
 
         return {
             "success": True,
             "count": len(data),
             "data": data,
             "cached": False,
+            "timings_ms": timings,
         }
 
     except HTTPException:

@@ -142,8 +142,8 @@ def load_cached_schedule(user_id: str):
     được lưu riêng nếu cần.
     """
     try:
-        from app.core.db import schedule_collection
-        doc = schedule_collection.find_one({"user_id": user_id}, {"_id": 0})
+        from app.core.db import get_schedule_collection
+        doc = get_schedule_collection().find_one({"user_id": user_id}, {"_id": 0})
         return doc
     except Exception as e:
         print(f"Error loading cached schedule: {e}")
@@ -156,7 +156,7 @@ def save_schedule(user_id: str, schedule_rows: list, ttl_days: int = None):
     `ttl_days` mặc định lấy từ env `SCHEDULE_CACHE_TTL_DAYS` hoặc 7 ngày.
     """
     try:
-        from app.core.db import schedule_collection
+        from app.core.db import get_schedule_collection
 
         if ttl_days is None:
             try:
@@ -174,7 +174,7 @@ def save_schedule(user_id: str, schedule_rows: list, ttl_days: int = None):
             "source": "student.uit.edu.vn",
         }
 
-        schedule_collection.update_one(
+        get_schedule_collection().update_one(
             {"user_id": user_id},
             {"$set": doc},
             upsert=True,
@@ -188,8 +188,8 @@ def save_schedule(user_id: str, schedule_rows: list, ttl_days: int = None):
 def load_cached_exam_schedule(user_id: str, lanthi: int, hocky: int, namhoc: int):
     """Lấy lịch thi đã cache từ DB theo user và học kỳ."""
     try:
-        from app.core.db import exam_collection
-        return exam_collection.find_one(
+        from app.core.db import get_exam_collection
+        return get_exam_collection().find_one(
             {"user_id": user_id, "lanthi": lanthi, "hocky": hocky, "namhoc": namhoc},
             {"_id": 0}
         )
@@ -201,7 +201,7 @@ def load_cached_exam_schedule(user_id: str, lanthi: int, hocky: int, namhoc: int
 def save_exam_schedule(user_id: str, lanthi: int, hocky: int, namhoc: int, exam_rows: list, ttl_days: int = None):
     """Lưu hoặc cập nhật lịch thi cho user/học kỳ với thời gian hết hạn."""
     try:
-        from app.core.db import exam_collection
+        from app.core.db import get_exam_collection
 
         if ttl_days is None:
             try:
@@ -222,7 +222,7 @@ def save_exam_schedule(user_id: str, lanthi: int, hocky: int, namhoc: int, exam_
             "source": "student.uit.edu.vn",
         }
 
-        exam_collection.update_one(
+        get_exam_collection().update_one(
             {"user_id": user_id, "lanthi": lanthi, "hocky": hocky, "namhoc": namhoc},
             {"$set": doc},
             upsert=True,
