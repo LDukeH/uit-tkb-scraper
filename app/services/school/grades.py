@@ -350,6 +350,10 @@ def save_grades_bulk(user_id: str, student_profile: dict, summary: dict,
 
             expires = datetime.utcnow() + timedelta(days=sem_ttl)
 
+            diem_tb = sem.get("diem_trung_binh", "")
+            if not isinstance(diem_tb, str):
+                diem_tb = str(diem_tb) if diem_tb is not None else ""
+
             doc = {
                 "user_id": user_id,
                 "hocky": sem["hocky"],
@@ -357,7 +361,7 @@ def save_grades_bulk(user_id: str, student_profile: dict, summary: dict,
                 "student_profile": student_profile,
                 "subjects": sem.get("subjects", []),
                 "so_tin_chi": sem.get("so_tin_chi"),
-                "diem_trung_binh": sem.get("diem_trung_binh", ""),
+                "diem_trung_binh": diem_tb,
                 "summary": summary,
                 "updated_at": datetime.utcnow(),
                 "expires_at": expires,
@@ -394,11 +398,15 @@ def load_all_cached_grades(user_id: str):
         summary = docs[0].get("summary", {})
         semesters = []
         for doc in docs:
+            diem_tb = doc.get("diem_trung_binh", "")
+            if not isinstance(diem_tb, str):
+                diem_tb = str(diem_tb) if diem_tb is not None else ""
+
             semesters.append({
                 "hocky": doc.get("hocky"),
                 "namhoc": doc.get("namhoc"),
                 "so_tin_chi": doc.get("so_tin_chi"),
-                "diem_trung_binh": doc.get("diem_trung_binh", ""),
+                "diem_trung_binh": diem_tb,
                 "subjects": doc.get("subjects", []),
             })
 

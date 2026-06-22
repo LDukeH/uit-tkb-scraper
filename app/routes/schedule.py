@@ -1,5 +1,8 @@
 import time
+import logging
 from fastapi import APIRouter, HTTPException, Header, Request
+
+logger = logging.getLogger("uit.routes.schedule")
 
 from app.services.school_service import (
     get_schedule,
@@ -42,6 +45,7 @@ def schedule(authorization: str = Header(None), request: Request = None):
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")
 
         # DB Cache read
+        cache_check_time = time.perf_counter()
         if username:
             t0 = time.perf_counter()
             cached = load_cached_schedule(username)
@@ -50,7 +54,10 @@ def schedule(authorization: str = Header(None), request: Request = None):
             if cached and cached.get("schedule"):
                 total_ms = round((time.perf_counter() - t_request) * 1000.0, 1)
                 timings["total_ms"] = total_ms
+                logger.info("[CACHE] HIT for user=%s, db_read=%.1fms, total=%.1fms", username, timings["db_read_ms"], total_ms)
                 return {"success": True, "count": len(cached.get("schedule")), "data": cached.get("schedule"), "cached": True, "timings_ms": timings}
+            else:
+                logger.info("[CACHE] MISS for user=%s, db_read=%.1fms", username, timings["db_read_ms"])
 
         # Scrape from UIT
         t1 = time.perf_counter()
@@ -71,6 +78,21 @@ def schedule(authorization: str = Header(None), request: Request = None):
         return {"success": True, "count": len(data), "data": data, "cached": False, "timings_ms": timings}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/test-cache")
+def test_cache():
+    t0 = time.perf_counter()
+    from app.core.db import get_client
+    client = get_client()
+    db = client["uit-service"]
+    doc = db["schedules"].find_one({"user_id": "24520378"})
+    elapsed = (time.perf_counter() - t0) * 1000.0
+    return {
+        "found": doc is not None,
+        "db_query_ms": round(elapsed, 1),
+        "keys": list(doc.keys()) if doc else [],
+    }
 
 
 @router.get(
