@@ -139,8 +139,16 @@ def get_valid_session(token):
         
         return None  # Caller must handle re-login
 
-    # Session is valid - extend expiry
-    data["expires"] = time.time() + SESSION_DURATION
+    # Session is valid - extend expiry (both in-memory and MongoDB)
+    new_expires = time.time() + SESSION_DURATION
+    data["expires"] = new_expires
+    try:
+        get_session_collection().update_one(
+            {"token": token},
+            {"$set": {"expires": datetime.utcfromtimestamp(new_expires)}}
+        )
+    except Exception as e:
+        logger.warning("[SESSION] Failed to update expiry in MongoDB token=%s error=%s", token[:8], e)
     elapsed = (time.perf_counter() - t0) * 1000.0
     logger.info("[SESSION] VALID token=%s user=%s in %.1fms", token[:8], data["auth_data"]["username"], elapsed)
     return current_session
