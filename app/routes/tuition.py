@@ -1,4 +1,5 @@
 import time
+import logging
 from fastapi import APIRouter, HTTPException, Header, Query, Request
 from typing import Optional
 
@@ -16,6 +17,8 @@ from app.services.school_service import (
 )
 from app.services.school.tuition import transform_tuition_response
 from app.schemas.tuition import TuitionResponse, TuitionSummaryResponse
+
+logger = logging.getLogger("uit.routes.tuition")
 
 router = APIRouter(prefix="/tuition", tags=["Tuition"])
 
