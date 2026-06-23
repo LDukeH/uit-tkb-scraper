@@ -64,6 +64,12 @@ except Exception:
 
 grade_collection = db["grades"]
 
+# Drop legacy index if it exists (old single-field unique index on user_id)
+try:
+	grade_collection.drop_index("unique_user_grades")
+except Exception:
+	pass
+
 try:
 	grade_collection.create_index(
 		[("user_id", 1), ("hocky", 1), ("namhoc", 1)],
