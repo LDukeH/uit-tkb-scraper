@@ -3,7 +3,7 @@ import time
 
 SESSION_STORE = {} 
 
-SESSION_DURATION = 1800  # 30 phut
+SESSION_DURATION = 150  # 2 phut
 
 def save_session(token, session, username, password):
     SESSION_STORE[token] = {

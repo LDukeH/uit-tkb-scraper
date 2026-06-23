@@ -1,6 +1,6 @@
 LOGIN_URL = "https://student.uit.edu.vn/user/login"
 SCHEDULE_URL = "https://student.uit.edu.vn/sinhvien/tkb"
-SESSION_DURATION = 900
+SESSION_DURATION = 150
 
 BASE_URL = "https://student.uit.edu.vn"
 ANNOUNCEMENT_URL = BASE_URL + "/thong-bao-chung?page="
