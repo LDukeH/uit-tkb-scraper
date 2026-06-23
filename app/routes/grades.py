@@ -89,6 +89,12 @@ def grades(
                 elif namhoc is not None:
                     semesters = [s for s in semesters if s["namhoc"] == namhoc]
 
+                # Normalize diem_trung_binh to string for Pydantic validation
+                for sem in semesters:
+                    dtb = sem.get("diem_trung_binh")
+                    if dtb is not None and not isinstance(dtb, str):
+                        sem["diem_trung_binh"] = str(dtb)
+
                 total_ms = round((time.perf_counter() - t_request) * 1000.0, 1)
                 timings["total_ms"] = total_ms
 
@@ -131,6 +137,12 @@ def grades(
             semesters = [s for s in semesters if s["hocky"] == hocky]
         elif namhoc is not None:
             semesters = [s for s in semesters if s["namhoc"] == namhoc]
+
+        # Normalize diem_trung_binh to string for Pydantic validation
+        for sem in semesters:
+            dtb = sem.get("diem_trung_binh")
+            if dtb is not None and not isinstance(dtb, str):
+                sem["diem_trung_binh"] = str(dtb)
 
         total_ms = round((time.perf_counter() - t_request) * 1000.0, 1)
         timings["total_ms"] = total_ms
