@@ -10,6 +10,7 @@ from app.routes.internal_scraper import router as internal_router
 from app.routes.tuition import router as tuition_router
 from app.routes.deadlines import router as deadlines_router
 from app.routes.grades import router as grades_router
+from app.routes.profile import router as profile_router
 from app.middleware.timing import TimingMiddleware
 from app.core.timing import TimingCollector
 
@@ -75,3 +76,4 @@ app.include_router(internal_router)
 app.include_router(tuition_router)
 app.include_router(deadlines_router)
 app.include_router(grades_router)
+app.include_router(profile_router)
