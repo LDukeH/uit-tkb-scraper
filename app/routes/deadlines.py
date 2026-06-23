@@ -5,7 +5,13 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Query, Request
 
 from app.services.moodle_service import MoodleClient
-from app.services.school_service import get_valid_session, SESSION_STORE
+from app.services.school_service import (
+    get_valid_session,
+    get_credentials_from_db,
+    login_and_get_session,
+    save_session,
+    SESSION_STORE,
+)
 from app.core.db import get_deadlines_collection
 from app.schemas.deadline import DeadlineResponse
 
@@ -51,8 +57,22 @@ def deadlines(
     token = authorization.replace("Bearer ", "")
     session = get_valid_session(token)
 
+    # If session not in cache or expired, try to re-login
     if not session:
-        raise HTTPException(status_code=401, detail="Session expired")
+        username, password = get_credentials_from_db(token)
+        if username and password:
+            logger.info("[DEADLINES] Re-login required for user=%s", username)
+            new_session = login_and_get_session(username, password)
+            if new_session:
+                save_session(token, new_session, username, password)
+                session = new_session
+                logger.info("[DEADLINES] Re-login successful for user=%s", username)
+            else:
+                logger.warning("[DEADLINES] Re-login failed for user=%s", username)
+                raise HTTPException(status_code=401, detail="Session expired - re-login failed")
+        else:
+            logger.warning("[DEADLINES] No credentials found for token=%s", token[:8])
+            raise HTTPException(status_code=401, detail="Session not found")
 
     try:
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")

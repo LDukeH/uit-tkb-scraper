@@ -6,6 +6,9 @@ from app.core.cache_stampede import stampede
 from app.services.school_service import (
     get_grades,
     get_valid_session,
+    get_credentials_from_db,
+    login_and_get_session,
+    save_session,
     load_all_cached_grades,
     save_grade,
     save_grades_bulk,
@@ -50,8 +53,22 @@ def grades(
     token = authorization.replace("Bearer ", "")
     session = get_valid_session(token)
 
+    # If session not in cache or expired, try to re-login
     if not session:
-        raise HTTPException(status_code=401, detail="Session expired")
+        username, password = get_credentials_from_db(token)
+        if username and password:
+            logger.info("[GRADES] Re-login required for user=%s", username)
+            new_session = login_and_get_session(username, password)
+            if new_session:
+                save_session(token, new_session, username, password)
+                session = new_session
+                logger.info("[GRADES] Re-login successful for user=%s", username)
+            else:
+                logger.warning("[GRADES] Re-login failed for user=%s", username)
+                raise HTTPException(status_code=401, detail="Session expired - re-login failed")
+        else:
+            logger.warning("[GRADES] No credentials found for token=%s", token[:8])
+            raise HTTPException(status_code=401, detail="Session not found")
 
     try:
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")

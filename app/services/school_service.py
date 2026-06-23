@@ -2,6 +2,7 @@ from app.services.school.session import (
     save_session,
     is_session_alive,
     get_valid_session,
+    get_credentials_from_db,
     login_and_get_session,
     SESSION_STORE,
 )

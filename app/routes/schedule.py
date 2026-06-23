@@ -7,6 +7,9 @@ logger = logging.getLogger("uit.routes.schedule")
 from app.services.school_service import (
     get_schedule,
     get_valid_session,
+    get_credentials_from_db,
+    login_and_get_session,
+    save_session,
     load_cached_schedule,
     save_schedule,
     load_cached_exam_schedule,
@@ -38,8 +41,22 @@ def schedule(authorization: str = Header(None), request: Request = None):
     token = authorization.replace("Bearer ", "")
     session = get_valid_session(token)
 
+    # If session not in cache or expired, try to re-login
     if not session:
-        raise HTTPException(status_code=401, detail="Session expired")
+        username, password = get_credentials_from_db(token)
+        if username and password:
+            logger.info("[SCHEDULE] Re-login required for user=%s", username)
+            new_session = login_and_get_session(username, password)
+            if new_session:
+                save_session(token, new_session, username, password)
+                session = new_session
+                logger.info("[SCHEDULE] Re-login successful for user=%s", username)
+            else:
+                logger.warning("[SCHEDULE] Re-login failed for user=%s", username)
+                raise HTTPException(status_code=401, detail="Session expired - re-login failed")
+        else:
+            logger.warning("[SCHEDULE] No credentials found for token=%s", token[:8])
+            raise HTTPException(status_code=401, detail="Session not found")
 
     try:
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")
@@ -118,8 +135,22 @@ def exam_schedule(
     token = authorization.replace("Bearer ", "")
     session = get_valid_session(token)
 
+    # If session not in cache or expired, try to re-login
     if not session:
-        raise HTTPException(status_code=401, detail="Session expired")
+        username, password = get_credentials_from_db(token)
+        if username and password:
+            logger.info("[EXAM] Re-login required for user=%s", username)
+            new_session = login_and_get_session(username, password)
+            if new_session:
+                save_session(token, new_session, username, password)
+                session = new_session
+                logger.info("[EXAM] Re-login successful for user=%s", username)
+            else:
+                logger.warning("[EXAM] Re-login failed for user=%s", username)
+                raise HTTPException(status_code=401, detail="Session expired - re-login failed")
+        else:
+            logger.warning("[EXAM] No credentials found for token=%s", token[:8])
+            raise HTTPException(status_code=401, detail="Session not found")
 
     try:
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")
