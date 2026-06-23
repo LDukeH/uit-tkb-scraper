@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 import logging
 import requests
 from requests.adapters import HTTPAdapter
@@ -46,8 +47,8 @@ def save_session(token, session, username, password):
             "token": token,
             "username": username,
             "password": password,
-            "expires": expires,
-            "created_at": time.time()
+            "expires": datetime.utcfromtimestamp(expires),
+            "created_at": datetime.utcnow()
         }
         get_session_collection().update_one(
             {"token": token},
@@ -131,7 +132,7 @@ def get_valid_session(token):
         try:
             get_session_collection().update_one(
                 {"token": token},
-                {"$set": {"expires": time.time()}}  # Mark as expired
+                {"$set": {"expires": datetime.utcnow()}}  # Mark as expired
             )
         except Exception:
             pass
