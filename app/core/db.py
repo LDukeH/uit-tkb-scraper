@@ -70,6 +70,12 @@ def _ensure_indexes() -> None:
              {"unique": True, "name": "unique_user_month"}),
             ([("expires_at", 1)], {"expireAfterSeconds": 0, "name": "ttl_expires_at_deadlines"}),
         ])
+        # Drop legacy index if it exists (old single-field unique on user_id)
+        try:
+            db["grades"].drop_index("unique_user_grades")
+        except Exception:
+            pass
+
         _try_index(db["grades"], [
             ([("user_id", 1), ("hocky", 1), ("namhoc", 1)],
              {"unique": True, "name": "unique_user_grade_term"}),
