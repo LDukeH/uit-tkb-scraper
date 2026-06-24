@@ -13,7 +13,8 @@ from app.services.school_service import (
     get_credentials_from_db,
     login_and_get_session,
     save_session,
-    load_all_cached_grades,
+    load_cached_profile,
+    save_profile,
     SESSION_STORE,
 )
 from app.schemas.common import StudentProfile
@@ -61,14 +62,14 @@ def get_profile(authorization: str = Header(None), request: Request = None):
         # Try to get from cache first
         if username:
             t0 = time.perf_counter()
-            cached = load_all_cached_grades(username)
+            cached_profile = load_cached_profile(username)
             timings["db_read_ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
 
-            if cached and cached.get("student_profile"):
+            if cached_profile:
                 total_ms = round((time.perf_counter() - t_request) * 1000.0, 1)
                 timings["total_ms"] = total_ms
                 logger.info("[PROFILE] CACHE HIT for user=%s, total=%.1fms", username, total_ms)
-                return cached["student_profile"]
+                return cached_profile
 
         # No cache — scrape (with stampede protection)
         with stampede(f"profile:{username}", timeout=10.0):
@@ -80,12 +81,11 @@ def get_profile(authorization: str = Header(None), request: Request = None):
             all_semesters = raw.get("semesters") or []
             summary = raw.get("summary") or {}
 
-            # Save to cache for future use
-            if username and all_semesters:
+            # Save profile to cache for future use
+            if username and student_profile:
                 t2 = time.perf_counter()
                 try:
-                    from app.services.school_service import save_grades_bulk
-                    save_grades_bulk(username, student_profile, summary, all_semesters)
+                    save_profile(username, student_profile)
                 except Exception:
                     pass
                 timings["db_write_ms"] = round((time.perf_counter() - t2) * 1000.0, 1)

@@ -85,6 +85,10 @@ def _ensure_indexes() -> None:
             ([("token", 1)], {"unique": True, "name": "unique_token"}),
             ([("expires", 1)], {"expireAfterSeconds": 0, "name": "ttl_expires"}),
         ])
+        _try_index(db["profiles"], [
+            ([("user_id", 1)], {"unique": True, "name": "unique_user_profile"}),
+            ([("expires_at", 1)], {"expireAfterSeconds": 0, "name": "ttl_expires_at_profile"}),
+        ])
 
         _indexes_created = True
 
@@ -132,3 +136,8 @@ def get_grade_collection() -> Collection:
 def get_session_collection() -> Collection:
     _ensure_indexes()
     return get_client()["uit-service"]["sessions"]
+
+
+def get_profile_collection() -> Collection:
+    _ensure_indexes()
+    return get_client()["uit-service"]["profiles"]

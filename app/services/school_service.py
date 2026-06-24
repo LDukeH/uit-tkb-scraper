@@ -38,6 +38,10 @@ from app.services.school.grades import (
     save_grades_bulk,
     load_all_cached_grades,
 )
+from app.services.school.profile import (
+    save_profile,
+    load_cached_profile,
+)
 from app.services.school.constants import (  
     LOGIN_URL,
     SCHEDULE_URL,
