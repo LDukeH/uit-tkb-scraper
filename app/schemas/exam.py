@@ -22,21 +22,13 @@ class ExamScheduleItem(BaseModel):
         description="Exam date in YYYY-MM-DD format",
         examples=["2024-12-20"],
     )
-    exam_datetime: str = Field(
-        description="Full exam datetime in ISO format",
-        examples=["2024-12-20T07:00:00"],
-    )
     exam_shift: str = Field(
         description="Exam shift/period",
         examples=["Ca 1", "Ca 2"],
     )
     start_time: str = Field(
-        description="Exam start time",
-        examples=["07:00"],
-    )
-    end_time: str = Field(
-        description="Exam end time",
-        examples=["08:45"],
+        description="Exam start time derived from shift",
+        examples=["07:30"],
     )
     weekday: str = Field(
         description="Day of the week in Vietnamese",
@@ -45,14 +37,6 @@ class ExamScheduleItem(BaseModel):
     room: str = Field(
         description="Exam room location",
         examples=["Phòng A1.201"],
-    )
-    status: str = Field(
-        description="Exam status",
-        examples=["UPCOMING", "COMPLETED"],
-    )
-    days_remaining: int = Field(
-        description="Number of days remaining until the exam",
-        examples=[5, -2],
     )
 
 
