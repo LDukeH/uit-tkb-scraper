@@ -42,6 +42,14 @@ class Subject(BaseModel):
         description="Instructor name",
         examples=["TS. Nguyễn Văn A"],
     )
+    start_date: str = Field(
+        description="Start date of the class schedule",
+        examples=["05/09/2024"],
+    )
+    end_date: str = Field(
+        description="End date of the class schedule",
+        examples=["20/12/2024"],
+    )
     date: str = Field(
         description="Date range for the class",
         examples=["05/09/2024 -> 20/12/2024"],

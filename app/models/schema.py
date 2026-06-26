@@ -19,6 +19,8 @@ class Subject(BaseModel):
     time: str
     start_time: str
     end_time: str
+    start_date: str = ""
+    end_date: str = ""
     code: str
     name: str
     room: str
@@ -126,7 +128,7 @@ class TuitionData(BaseModel):
 class TuitionResponse(BaseModel):
     success: bool
     cached: bool
-    count: int
+    int
     data: Optional[TuitionData] = None
     timings_ms: Optional[dict] = None
 
