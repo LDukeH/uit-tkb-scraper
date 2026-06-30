@@ -1,6 +1,10 @@
-from fastapi import APIRouter, HTTPException, Header, Query, Request
-from typing import Optional
+import logging
 import time
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Header, Query, Request
+
+logger = logging.getLogger("uit.routes.grades")
 
 from app.core.cache_stampede import stampede
 from app.services.school_service import (
@@ -73,8 +77,9 @@ def grades(
     try:
         username = SESSION_STORE.get(token, {}).get("auth_data", {}).get("username")
 
-        # DB Cache read
-        if username:
+        # DB Cache read — only use cache when filter params are provided
+        # Without filter params, always fetch fresh data (grades may have changed)
+        if username and (hocky is not None or namhoc is not None):
             t0 = time.perf_counter()
             cached = load_all_cached_grades(username)
             timings["db_read_ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
