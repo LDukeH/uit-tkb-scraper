@@ -1,5 +1,4 @@
 import time
-import re
 from datetime import datetime
 import logging
 import requests
@@ -156,40 +155,28 @@ def get_valid_session(token):
 
 
 def login_and_get_session(username, password):
-    """Perform UIT login and return session object.
-    
-    Optimized with regex instead of BeautifulSoup for form parsing,
-    and reuses the shared session pool for connection reuse.
-    """
+    """Perform UIT login and return session object"""
     t0 = time.perf_counter()
-    session = get_shared_session()
+    session = requests.Session()
     headers = {"User-Agent": "Mozilla/5.0"}
 
     try:
         res = session.get(LOGIN_URL, headers=headers)
-        if res.status_code != 200:
-            logger.warning("[SESSION] login GET failed for user=%s status=%d", username, res.status_code)
+        soup = BeautifulSoup(res.text, "html.parser")
+
+        form = soup.find("form", {"id": "user-login"}) or soup.find("form", {"id": "user-login-form"})
+        if not form:
+            logger.warning("[SESSION] login form not found for user=%s", username)
             return None
 
-        html = res.text
-
-        # Fast path: extract all hidden form inputs using regex (avoids BeautifulSoup DOM parse)
-        # Matches: <input type="hidden" name="X" value="Y" ...>
-        payload = dict(re.findall(r'<input[^>]*name="([^"]*)"[^>]*value="([^"]*)"', html))
-        
-        # Override with login credentials
+        payload = {inp.get("name"): inp.get("value", "") for inp in form.find_all("input") if inp.get("name")}
         payload.update({"name": username, "pass": password, "op": "Đăng nhập"})
 
-        # Check for captcha (fast regex check instead of BeautifulSoup)
-        captcha_match = re.search(r'class="[^"]*english-captcha-image[^"]*"[^>]*>\s*<img[^>]*alt="captcha:\s*([^"]*)"', html, re.IGNORECASE)
-        if captcha_match:
-            payload["english_captcha_answer"] = captcha_match.group(1).strip()
+        img = form.select_one(".english-captcha-image img")
+        if img:
+            payload["english_captcha_answer"] = img["alt"].replace("captcha:", "").strip()
 
-        # Determine login action URL
-        action_match = re.search(r'<form[^>]*id="user-login"[^>]*action="([^"]*)"', html)
-        if not action_match:
-            action_match = re.search(r'<form[^>]*id="user-login-form"[^>]*action="([^"]*)"', html)
-        action = action_match.group(1) if action_match else "/user/login"
+        action = form.get("action", "/user/login")
         login_url = "https://student.uit.edu.vn" + action
 
         login_res = session.post(login_url, data=payload, headers=headers)
